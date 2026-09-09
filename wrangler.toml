@@ -1,0 +1,11 @@
+# Configuracion para desplegar en Cloudflare Pages.
+#   Build command:            npm run build
+#   Build output directory:   dist
+#
+# Despliegue con CLI:
+#   npm run build
+#   wrangler pages deploy dist --project-name pedalea-a-polonia
+
+name = "pedalea-a-polonia"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-09-01"

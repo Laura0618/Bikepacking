@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-fondo text-texto antialiased;
+    font-feature-settings: 'kern';
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-bosque ring-offset-2 ring-offset-fondo;
+  }
+}
+
+@layer components {
+  .tarjeta {
+    @apply rounded-2xl border border-bosque-suave bg-superficie p-4 shadow-sm;
+  }
+
+  .boton {
+    @apply inline-flex min-h-touch min-w-touch items-center justify-center gap-2 rounded-xl
+      px-4 py-2 text-base font-semibold transition focus-visible:ring-2;
+  }
+
+  .boton-primario {
+    @apply boton bg-bosque text-white hover:bg-bosque-oscuro active:bg-bosque-oscuro;
+  }
+
+  .boton-secundario {
+    @apply boton border border-bosque bg-superficie text-bosque hover:bg-bosque-suave;
+  }
+
+  .boton-peligro {
+    @apply boton border border-alerta bg-superficie text-alerta hover:bg-alerta-suave;
+  }
+
+  .campo {
+    @apply min-h-touch w-full rounded-xl border border-bosque-suave bg-superficie px-3 py-2
+      text-base text-texto placeholder:text-texto-suave focus:border-bosque;
+  }
+
+  .etiqueta {
+    @apply mb-1 block text-sm font-semibold text-texto;
+  }
+}

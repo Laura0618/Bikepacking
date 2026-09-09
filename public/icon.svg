@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pedalea a Polonia">
+  <rect width="512" height="512" rx="96" fill="#2f5d3a" />
+  <circle cx="168" cy="336" r="78" fill="none" stroke="#f5f3ec" stroke-width="26" />
+  <circle cx="352" cy="336" r="78" fill="none" stroke="#f5f3ec" stroke-width="26" />
+  <path d="M168 336 L252 190 L352 336 M252 190 L312 190 M200 336 L272 190" fill="none" stroke="#f0c58c" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
