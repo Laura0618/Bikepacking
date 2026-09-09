@@ -82,7 +82,9 @@ Sin `any` en todo el proyecto; tipos estrictos en [`src/types/index.ts`](src/typ
 
 ## Requisitos
 
-- Node.js 20 o superior
+- **Node.js 22 o superior** (lo exige `wrangler` 4.x; fijado en `.node-version` y en
+  `package.json` → `engines`). El entorno de build de Cloudflare también debe usar 22
+  (ver *Despliegue con autenticación*).
 - npm 10 o superior
 
 ## Instalación local
@@ -186,114 +188,152 @@ pase por el código antes que el fallback SPA de los assets; el resto de rutas l
 
 ### Cómo funciona
 
-- **Sin sesión:** todo en `localStorage`, como antes.
+- **Sin sesión:** todo en `localStorage`, como antes. No se llama a `/api/sync`, no hay
+  errores en bucle; el chip de la cabecera dice *Inicia sesión*.
 - **Al iniciar sesión:** se descarga el estado de la cuenta (`GET /api/sync`). Si la
   cuenta está vacía y hay datos locales, un diálogo pregunta si **copiarlos a la cuenta**
   o **empezar la cuenta vacía** (sin duplicados: el `id` de cada fila es la clave).
 - **En uso normal:** cada cambio local se sube con *debounce* de 1,5 s
-  (`POST /api/sync`, solo filas modificadas). Estado visible en la cabecera y en Ajustes:
-  *Sincronizado / Guardando… / Pendiente / Sin conexión / Error*.
-- **Sin red:** se sigue registrando y editando en local; al volver la conexión se
-  reintenta el envío automáticamente.
+  (`POST /api/sync`, solo filas modificadas). El **registro de una salida nunca se
+  bloquea por un fallo de red**: se guarda en local y se reintenta. Indicador en la
+  cabecera y en Ajustes: *Sincronizado / Guardando… / Pendiente de sincronizar / Sin
+  conexión / Error / Inicia sesión*.
+- **Sin red:** se sigue registrando y editando en local; al volver la conexión (`online`)
+  se reintenta el envío.
 - **Conflictos:** *gana el más reciente* por `updatedAt` (`resolveRow` / `incomingWins`,
   aisladas para poder cambiar la política más adelante).
-- **Sesión:** cookie `pp_session` firmada con HMAC-SHA256 (`SESSION_SECRET`), `HttpOnly`,
-  `Secure` (en https), `SameSite=Lax`, 30 días. El logout borra la cookie; los datos
-  locales se conservan. La exportación JSON sigue disponible como copia de seguridad.
+- **Aislamiento:** el `userId` se extrae **solo** de la cookie de sesión firmada; toda
+  consulta a D1 lleva `WHERE user_id = ?1` con ese id. Un payload no puede seleccionar a
+  otra usuaria.
 
-### Variables y secretos
+### Endurecimiento de seguridad aplicado
 
-| Nombre                 | Dónde                          | Qué es |
-| ---------------------- | ------------------------------ | ------ |
-| `APP_URL`              | `wrangler.toml` `[vars]` / panel | URL pública sin barra final. Dev: `http://localhost:5173`. |
-| `GOOGLE_CLIENT_ID`     | `wrangler.toml` `[vars]` / panel | Client ID de Google OAuth (no es secreto). |
-| `GOOGLE_CLIENT_SECRET` | `.dev.vars` (local) / `wrangler secret` (prod) | Client secret de Google. |
-| `SESSION_SECRET`       | `.dev.vars` (local) / `wrangler secret` (prod) | Cadena aleatoria larga (`openssl rand -base64 48`). |
+- **`Cache-Control: no-store`** en todas las respuestas `/api/*` (`worker/http.ts` +
+  `withNoStore` en `worker/index.ts`).
+- **Comprobación de mismo origen** (`isSameOrigin`, vía `Sec-Fetch-Site` y, en su
+  defecto, `Origin`/`Referer` contra `APP_URL`) en `POST /api/sync` y
+  `POST /api/auth/logout` → `403 bad_origin` si no coincide. **No hay CORS abierto**: el
+  Worker no emite `Access-Control-Allow-Origin`.
+- **Rate limiting** en `/api/auth/login` (10/min/IP), `/api/auth/callback` (20/min/IP) y
+  **`/api/sync`** (120/min por usuaria) → `429 rate_limited`. El limitador está detrás de
+  la interfaz `RateLimiter` (`worker/ratelimit.ts`); la implementación por defecto es en
+  memoria por *isolate* y se puede sustituir por KV/Durable Object sin tocar las llamadas.
+- **Validación estricta de payloads** (`worker/validate.ts`): `workoutType`, `intensity`,
+  `status` y `milestone.id` se restringen a los valores de dominio de
+  [`src/lib/domain.ts`](src/lib/domain.ts); rangos numéricos, formato de fechas
+  (`YYYY-MM-DD` vs ISO datetime), tamaño (≤ 20 KB/fila, ≤ 5000 filas) e ids duplicados.
+  Cuerpo inválido → `400 bad_payload` con mensaje claro.
+- **Sesión:** cookie `pp_session` firmada HMAC-SHA256 con `SESSION_SECRET`, `HttpOnly`,
+  `Secure` (en https), `SameSite=Lax`, 30 días. El estado anti-CSRF de OAuth (`pp_oauth`)
+  se valida en el callback.
+- **Secretos:** `GOOGLE_CLIENT_SECRET` y `SESSION_SECRET` se leen **solo** de `env` del
+  Worker; nunca están en `wrangler.toml`, el frontend ni archivos versionados.
+  [`.dev.vars`](.dev.vars.example) (valores locales) está en `.gitignore`.
 
-Nunca se guardan secretos en el repo. [`.dev.vars`](.dev.vars.example) está en
-`.gitignore`.
+## Despliegue con autenticación
 
-### Pasos manuales para activar la cuenta
+> ⚠️ **Rotación de secretos.** Si en algún momento un *client secret* de Google (formato
+> `GOCSPX-…`) apareció en `wrangler.toml`, en un commit, en un log o en cualquier archivo
+> versionado, **debe considerarse comprometido**: entra en Google Cloud Console →
+> *Credenciales* → tu ID de cliente OAuth → **restablecer / rotar el secreto** y vuelve a
+> configurar el nuevo con `wrangler secret put`. El *Client ID* no es secreto y puede
+> quedar en `wrangler.toml`.
 
-**1. Google Cloud Console** — https://console.cloud.google.com/apis/credentials
+Checklist manual (no requiere ningún despliegue automático):
 
-1. *Crear credenciales → ID de cliente de OAuth → Aplicación web*.
-2. *Orígenes autorizados de JavaScript*:
-   `http://localhost:5173` y `https://TU-DOMINIO` (el de tu Worker o dominio propio).
-3. *URIs de redirección autorizados*:
-   `http://localhost:5173/api/auth/callback` y `https://TU-DOMINIO/api/auth/callback`.
-4. Copia el **Client ID** y el **Client secret**. Configura la *pantalla de
-   consentimiento* (tipo Externo; con tu correo como usuario de prueba basta).
+1. **Node 22 en el build de Cloudflare.** `wrangler` 4.x exige Node ≥ 22.
+   - Local: `.node-version` ya es `22`.
+   - Panel de Cloudflare → Worker → **Settings → Build → Variables**: si existe una
+     variable `NODE_VERSION`, ponla a `22` (o bórrala para que mande `.node-version`).
+     Con Node 20 el paso *Deploying* falla con
+     *"Wrangler requires at least Node.js v22.0.0"*.
 
-**2. Cloudflare D1**
+2. **Crear D1 y migrar en remoto.**
+   ```bash
+   npx wrangler login
+   npx wrangler d1 create pedalea_a_polonia
+   # pega el database_id devuelto en wrangler.toml -> [[d1_databases]].database_id
+   npx wrangler d1 migrations apply pedalea_a_polonia --remote
+   ```
 
-```bash
-npx wrangler login
-npx wrangler d1 create pedalea_a_polonia
-# pega el database_id que devuelve en wrangler.toml -> [[d1_databases]].database_id
-npx wrangler d1 migrations apply pedalea_a_polonia --remote
-```
+3. **Secretos del Worker** (no van en ningún archivo):
+   ```bash
+   npx wrangler secret put GOOGLE_CLIENT_SECRET   # el GOCSPX-… de Google
+   openssl rand -base64 48                         # copia el resultado
+   npx wrangler secret put SESSION_SECRET          # pega ese resultado
+   ```
+   (o panel → *Settings → Variables and Secrets → Add → Secret / Encrypt*).
+   Guarda `SESSION_SECRET`: si cambia, se cierran todas las sesiones.
 
-**3. Variables y secretos del Worker**
+4. **`APP_URL` y `GOOGLE_CLIENT_ID`** en `[vars]` de [`wrangler.toml`](wrangler.toml)
+   (o como *Variables* de texto en el panel):
+   - `APP_URL = "https://bikepacking.castrolaura0311.workers.dev"` (URL pública real,
+     **sin barra final**).
+   - `GOOGLE_CLIENT_ID = "…apps.googleusercontent.com"` (el que lleva números al
+     principio; **no** el `GOCSPX-…`).
 
-- En [`wrangler.toml`](wrangler.toml) pon `APP_URL` = URL pública real y
-  `GOOGLE_CLIENT_ID` = tu client id. (O ponlos como *Variables* en el panel de
-  Cloudflare → tu Worker → *Settings → Variables*.)
-- Secretos:
-  ```bash
-  npx wrangler secret put GOOGLE_CLIENT_SECRET
-  npx wrangler secret put SESSION_SECRET
-  ```
-  (o en el panel: *Settings → Variables → Add → Encrypt*).
+5. **Callback de Google OAuth.** En Google Cloud Console → *Credenciales* → tu ID de
+   cliente OAuth:
+   - *URIs de redirección autorizados*:
+     `https://bikepacking.castrolaura0311.workers.dev/api/auth/callback`
+     (y `http://localhost:5173/api/auth/callback` para desarrollo).
+   - *Orígenes autorizados de JavaScript*:
+     `https://bikepacking.castrolaura0311.workers.dev`
+     (y `http://localhost:5173` para desarrollo).
+   - Pantalla de consentimiento tipo *Externo*; con tu correo como usuario de prueba basta.
 
-**4. Desplegar** (ver abajo). Si falta `GOOGLE_CLIENT_ID`/`SECRET`/`SESSION_SECRET`,
-la app sigue funcionando en modo local y Ajustes muestra "inicio de sesión no
-configurado"; el endpoint `/api/auth/login` responde `503` en vez de simular un login.
+6. **Desplegar y verificar.**
+   ```bash
+   npm run deploy          # = npm run build && wrangler deploy
+   ```
+   - `GET https://…/api/config` → `{"oauthConfigured":true}`.
+   - Abre la web → **Ajustes → Entrar con Google** → vuelve a `…/ajustes?login=ok`.
+   - `GET https://…/api/me` (con sesión) → `{"user":{…}}`.
+   - Registra una salida en el móvil, abre la web en el ordenador con la misma cuenta y
+     comprueba que aparece (y al revés). El chip debe pasar por *Guardando…* →
+     *Sincronizado*.
+
+Si faltan `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `SESSION_SECRET`, la app se
+publica igual y funciona en **modo local**: Ajustes muestra "inicio de sesión no
+configurado" y `/api/auth/login` responde `503` (no hay login falso).
+
+### Despliegue continuo (Git)
+
+Cloudflare → **Workers & Pages → Create → Workers → Import a repository** → repo
+`Laura0618/Bikepacking`. Build command `npm run build`, deploy command
+`npx wrangler deploy`. Cada `git push` a `main` redespliega. Recuerda el punto 1
+(NODE_VERSION = 22).
 
 ## Tests
 
 ```bash
-npm run test
+npm run lint && npm run test && npm run build
 ```
 
-Cubren, entre otros: horas semanales, detección de hitos, semanas de descarga, alertas
-de dolor y de progresión brusca, export/import JSON, **merge de sincronización**
-(LWW, tombstones, migración inicial), **firma/caducidad de sesión**, **validación de
-payloads** y **aislamiento por `user_id`**.
+Además de la lógica de entrenamiento (horas semanales, hitos, descargas, alertas,
+export/import), cubren:
+
+- **`syncEngine`**: merge LWW, tombstones remotas/locales, migración inicial forzada.
+- **Sesión** (`worker/__tests__/session.test.ts`): firma ida/vuelta, firma manipulada,
+  secreto distinto, token caducado.
+- **Validación** (`worker/__tests__/validate.test.ts`): enums fuera de dominio,
+  `milestone.id` inexistente, fechas mal formadas, rangos, ids duplicados, tamaño → `400`.
+- **API del Worker** (`worker/__tests__/api.test.ts`): `POST /api/sync` sin sesión →
+  `401`; desde origen ajeno → `403`; `Cache-Control: no-store` en las respuestas;
+  payload con enum inválido → `400`; rate limit de `/api/sync` → `429`; toda lectura
+  filtra por el `uid` de la cookie.
+- **Aislamiento** (`worker/__tests__/authorization.test.ts`): cada consulta de
+  `getSnapshot`/`applyPush` incluye `user_id` y liga el uid como primer parámetro.
+- **Dominio** (`src/lib/__tests__/domain.test.ts`): los arrays de valores válidos
+  coinciden con las etiquetas y los hitos.
 
 ## PWA y uso offline
 
 `vite-plugin-pwa` genera el `manifest` y un service worker (`autoUpdate`) que precachea
-la app. `/api/*` queda fuera del precacheo y del fallback SPA (estrategia `NetworkOnly`).
-Tras el primer `npm run build` + `preview` (o el primer despliegue) la app es
-**instalable** y funciona sin conexión; con cuenta, los cambios hechos offline se
-sincronizan al reconectar.
-
-## Despliegue en Cloudflare (gratis)
-
-Se despliega como **Worker con Static Assets** (no Pages). Config en
-[`wrangler.toml`](wrangler.toml): `main`, `[assets]` (`binding`, `not_found_handling`,
-`run_worker_first`), `[[d1_databases]]` y `[vars]`.
-
-### Desde el panel (Git)
-
-1. `git push` del repo a GitHub.
-2. Cloudflare → **Workers & Pages → Create → Workers → Import a repository** → elige el
-   repo.
-3. Ajustes de build:
-   - **Build command:** `npm run build`
-   - **Deploy command:** `npx wrangler deploy`
-   - Node 20 (se toma de `.node-version`).
-4. Antes o después del primer deploy, completa los **pasos manuales** de arriba
-   (D1 + migraciones + variables + secretos).
-5. Cada `git push` a `main` redespliega.
-
-### Con Wrangler (CLI)
-
-```bash
-npm run build
-npx wrangler deploy
-```
+la app. `/api/*` queda fuera del precacheo y del fallback SPA (`NetworkOnly` +
+`navigateFallbackDenylist`). Tras el primer `npm run build` + `preview` (o el primer
+despliegue) la app es **instalable** y funciona sin conexión; con cuenta, los cambios
+hechos offline se sincronizan al reconectar.
 
 ## Descargo
 

@@ -1,8 +1,13 @@
+import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../store/AppDataProvider';
 import type { SyncStatus } from '../types';
 
-const LABEL: Record<SyncStatus, string> = {
-  signed_out: 'Solo en este dispositivo',
+type ChipState = SyncStatus | 'loading';
+
+// Etiqueta corta para el chip de la cabecera (discreto).
+const LABEL: Record<ChipState, string> = {
+  loading: 'Comprobando sesion...',
+  signed_out: 'Inicia sesion',
   synced: 'Sincronizado',
   saving: 'Guardando...',
   pending: 'Pendiente de sincronizar',
@@ -10,7 +15,8 @@ const LABEL: Record<SyncStatus, string> = {
   error: 'Error al sincronizar',
 };
 
-const TONE: Record<SyncStatus, string> = {
+const TONE: Record<ChipState, string> = {
+  loading: 'bg-fondo text-texto-suave',
   signed_out: 'bg-fondo text-texto-suave',
   synced: 'bg-bosque-suave text-bosque-oscuro',
   saving: 'bg-recuperacion-suave text-recuperacion',
@@ -19,7 +25,8 @@ const TONE: Record<SyncStatus, string> = {
   error: 'bg-peligro-suave text-peligro',
 };
 
-const ICON: Record<SyncStatus, string> = {
+const ICON: Record<ChipState, string> = {
+  loading: '·',
   signed_out: '·',
   synced: '✓',
   saving: '⟳',
@@ -30,23 +37,36 @@ const ICON: Record<SyncStatus, string> = {
 
 export function SyncStatusChip(): JSX.Element | null {
   const { authStatus, syncStatus, syncNow } = useAppData();
-  if (authStatus !== 'signed_in') return null;
+  const navigate = useNavigate();
 
-  const clickable = syncStatus === 'error' || syncStatus === 'pending' || syncStatus === 'offline';
+  if (authStatus === 'loading') return null;
+
+  const state: ChipState = authStatus === 'signed_in' ? syncStatus : 'signed_out';
+
+  const onClick = (): void => {
+    if (state === 'signed_out') navigate('/ajustes');
+    else if (state === 'error' || state === 'pending' || state === 'offline') syncNow();
+  };
+  const clickable =
+    state === 'signed_out' || state === 'error' || state === 'pending' || state === 'offline';
 
   return (
     <button
       type="button"
-      onClick={() => clickable && syncNow()}
+      onClick={onClick}
       disabled={!clickable}
       aria-live="polite"
-      className={`inline-flex min-h-[28px] items-center gap-1 rounded-full px-2.5 text-xs font-semibold ${TONE[syncStatus]} ${
+      className={`inline-flex min-h-[28px] shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${TONE[state]} ${
         clickable ? 'cursor-pointer' : 'cursor-default'
       }`}
-      title={clickable ? 'Toca para reintentar' : LABEL[syncStatus]}
+      title={
+        state === 'signed_out'
+          ? 'Inicia sesion para sincronizar entre dispositivos'
+          : LABEL[state]
+      }
     >
-      <span aria-hidden="true">{ICON[syncStatus]}</span>
-      {LABEL[syncStatus]}
+      <span aria-hidden="true">{ICON[state]}</span>
+      {LABEL[state]}
     </button>
   );
 }

@@ -15,5 +15,5 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": false
   },
-  "include": ["worker", "src/types/index.ts"]
+  "include": ["worker", "src/types/index.ts", "src/lib/domain.ts"]
 }

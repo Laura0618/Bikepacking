@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Herramienta de planificacion y seguimiento para preparar un viaje en bicicleta con equipaje en seis meses.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "vite",

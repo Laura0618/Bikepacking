@@ -4,17 +4,26 @@
 // Pages Functions, porque el repo ya se despliega como Worker con `wrangler deploy`.
 // `run_worker_first = ["/api/*"]` en wrangler.toml hace que la API pase por aqui
 // antes que el fallback SPA de los assets.
+//
+// Endurecimiento aplicado:
+//  * Todas las respuestas /api/* llevan `Cache-Control: no-store` (withNoStore).
+//  * Los POST que mutan (/api/sync, /api/auth/logout) exigen mismo origen (isSameOrigin).
+//  * Rate limiting en /api/auth/* y en /api/sync (limiter abstracto).
+//  * userId SIEMPRE sale de la cookie de sesion firmada, nunca del payload.
 
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { getSnapshot, getUser, getLastSync, setLastSync, upsertUser, applyPush } from './db';
 import type { Env } from './env';
+import { buildAuthUrl, exchangeCode, fetchProfile, isOAuthConfigured } from './google';
 import {
-  buildAuthUrl,
-  exchangeCode,
-  fetchProfile,
-  isOAuthConfigured,
-} from './google';
-import { clientIp, errorJson, json, readJson, redirect } from './http';
+  clientIp,
+  errorJson,
+  isSameOrigin,
+  json,
+  readJson,
+  redirect,
+  withNoStore,
+} from './http';
 import { allow, sweep } from './ratelimit';
 import {
   OAUTH_STATE_COOKIE,
@@ -37,10 +46,16 @@ async function currentUserId(request: Request, env: Env): Promise<string | null>
   return payload?.uid ?? null;
 }
 
+function forbiddenOrigin(): Response {
+  return errorJson('Origen no permitido.', 403, 'bad_origin');
+}
+
+function tooMany(): Response {
+  return errorJson('Demasiadas peticiones. Prueba en un minuto.', 429, 'rate_limited');
+}
+
 async function handleLogin(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!allow(`login:${clientIp(request)}`, 10, 60_000)) {
-    return errorJson('Demasiados intentos. Prueba en un minuto.', 429, 'rate_limited');
-  }
+  if (!allow(`login:${clientIp(request)}`, 10, 60_000)) return tooMany();
   if (!isOAuthConfigured(env)) {
     return errorJson(
       'El inicio de sesion no esta configurado en este despliegue.',
@@ -60,12 +75,9 @@ async function handleLogin(request: Request, env: Env, url: URL): Promise<Respon
 }
 
 async function handleCallback(request: Request, env: Env, url: URL): Promise<Response> {
-  if (!allow(`callback:${clientIp(request)}`, 20, 60_000)) {
-    return errorJson('Demasiados intentos. Prueba en un minuto.', 429, 'rate_limited');
-  }
-  if (!isOAuthConfigured(env)) {
-    return errorJson('OAuth no configurado.', 503, 'oauth_not_configured');
-  }
+  if (!allow(`callback:${clientIp(request)}`, 20, 60_000)) return tooMany();
+  if (!isOAuthConfigured(env)) return errorJson('OAuth no configurado.', 503, 'oauth_not_configured');
+
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const cookies = parseCookies(request.headers.get('cookie'));
@@ -102,7 +114,8 @@ async function handleCallback(request: Request, env: Env, url: URL): Promise<Res
   }
 }
 
-function handleLogout(url: URL): Response {
+function handleLogout(request: Request, env: Env, url: URL): Response {
+  if (!isSameOrigin(request, env.APP_URL)) return forbiddenOrigin();
   return json({ ok: true }, 200, { 'set-cookie': clearCookie(SESSION_COOKIE, isSecure(url)) });
 }
 
@@ -117,20 +130,25 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
 async function handleSyncGet(request: Request, env: Env): Promise<Response> {
   const uid = await currentUserId(request, env);
   if (!uid) return errorJson('No autenticado.', 401, 'unauthenticated');
+  if (!allow(`sync:${uid}`, 120, 60_000)) return tooMany();
+
   const [snapshot, lastSyncAt] = await Promise.all([getSnapshot(env, uid), getLastSync(env, uid)]);
   return json({ ...snapshot, serverTime: new Date().toISOString(), lastSyncAt });
 }
 
 async function handleSyncPost(request: Request, env: Env): Promise<Response> {
+  if (!isSameOrigin(request, env.APP_URL)) return forbiddenOrigin();
+
   const uid = await currentUserId(request, env);
   if (!uid) return errorJson('No autenticado.', 401, 'unauthenticated');
+  if (!allow(`sync:${uid}`, 120, 60_000)) return tooMany();
 
   const body = await readJson(request);
   if (!body) return errorJson('Cuerpo JSON invalido.', 400, 'bad_body');
-  const push = parseSyncPush(body);
-  if (!push) return errorJson('Datos de sincronizacion invalidos.', 422, 'bad_payload');
+  const parsed = parseSyncPush(body);
+  if (!parsed.ok) return errorJson(parsed.error, 400, 'bad_payload');
 
-  const { conflicts } = await applyPush(env, uid, push);
+  const { conflicts } = await applyPush(env, uid, parsed.value);
   const serverTime = new Date().toISOString();
   await setLastSync(env, uid, serverTime);
   const snapshot = await getSnapshot(env, uid);
@@ -153,7 +171,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
 
   if (pathname === '/api/auth/login' && method === 'GET') return handleLogin(request, env, url);
   if (pathname === '/api/auth/callback' && method === 'GET') return handleCallback(request, env, url);
-  if (pathname === '/api/auth/logout' && method === 'POST') return handleLogout(url);
+  if (pathname === '/api/auth/logout' && method === 'POST') return handleLogout(request, env, url);
   if (pathname === '/api/me' && method === 'GET') return handleMe(request, env);
 
   if (pathname === '/api/sync' && method === 'GET') return handleSyncGet(request, env);
@@ -172,10 +190,10 @@ export default {
 
     sweep();
     try {
-      return await route(request, env, url);
+      return withNoStore(await route(request, env, url));
     } catch (err) {
       console.error('API error:', err);
-      return errorJson('Error interno.', 500, 'internal');
+      return withNoStore(errorJson('Error interno.', 500, 'internal'));
     }
   },
 };

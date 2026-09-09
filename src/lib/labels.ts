@@ -1,6 +1,7 @@
 // Etiquetas legibles en espanol para los valores del modelo de datos.
 
 import type { Intensity, WorkoutStatus, WorkoutType } from '../types';
+import { INTENSITIES as DOMAIN_INTENSITIES, WORKOUT_TYPES as DOMAIN_WORKOUT_TYPES } from './domain';
 
 export const WORKOUT_TYPE_LABEL: Record<WorkoutType, string> = {
   suave: 'Suave',
@@ -69,17 +70,9 @@ export const STATUS_TONE: Record<WorkoutStatus, 'bosque' | 'recuperacion' | 'ale
   skipped: 'alerta',
 };
 
-export const WORKOUT_TYPES: WorkoutType[] = [
-  'suave',
-  'moderado',
-  'salida_larga',
-  'recuperacion',
-  'cargada',
-  'simulacion',
-  'descanso',
-];
+export const WORKOUT_TYPES: readonly WorkoutType[] = DOMAIN_WORKOUT_TYPES;
 
-export const INTENSITIES: Intensity[] = ['muy_suave', 'suave', 'moderado', 'exigente'];
+export const INTENSITIES: readonly Intensity[] = DOMAIN_INTENSITIES;
 
 export const WEEKDAY_LABELS: readonly string[] = [
   'Domingo',
