@@ -68,13 +68,17 @@ bloque de 3 días · simulación de 4 días.
 
 ## Stack
 
-- React + TypeScript + Vite
-- Tailwind CSS
-- React Router
-- Recharts
-- PWA instalable y preparada para funcionar offline (`vite-plugin-pwa`)
-- Persistencia en `localStorage` (sin backend, sin autenticación, sin APIs externas)
-- Vitest para tests unitarios
+- **Frontend:** React + TypeScript + Vite, Tailwind CSS, React Router, Recharts.
+- **PWA** instalable y offline (`vite-plugin-pwa`).
+- **Persistencia local:** `localStorage` (clave `pedalea-a-polonia:v1`), que además hace
+  de caché offline cuando hay cuenta.
+- **Backend opcional (Fase 1 de persistencia):** un único **Cloudflare Worker** que
+  sirve la PWA y expone la API en `/api/*`, con **Cloudflare D1** (SQLite) como base de
+  datos y **Google OAuth** para la cuenta. Sin cuenta, la app funciona igual, solo en
+  local.
+- **Tests:** Vitest.
+
+Sin `any` en todo el proyecto; tipos estrictos en [`src/types/index.ts`](src/types/index.ts).
 
 ## Requisitos
 
@@ -83,60 +87,168 @@ bloque de 3 días · simulación de 4 días.
 
 ## Instalación local
 
+### Solo frontend (sin cuenta)
+
 ```bash
 npm install
-npm run dev
+npm run dev            # http://localhost:5173
 ```
 
-La app queda disponible en `http://localhost:5173`.
+Al abrirla por primera vez se genera el plan de seis meses desde la fecha actual.
+Cámbiala y regenéralo en **Ajustes**.
 
-Al abrirla por primera vez se genera automáticamente el plan de seis meses a partir
-de la fecha actual. Puedes cambiar la fecha de inicio y regenerarlo desde **Ajustes**.
+### Con API + base de datos (cuenta y sincronización)
+
+Necesitas dos procesos. En una terminal el frontend, en otra el Worker:
+
+```bash
+# 1. Prepara la base D1 local y aplica migraciones
+npx wrangler d1 create pedalea_a_polonia      # pega el database_id en wrangler.toml
+npm run db:migrate:local
+
+# 2. Copia las variables locales y rellénalas (ver .dev.vars.example)
+cp .dev.vars.example .dev.vars
+
+# 3. Arranca API (Worker) y frontend
+npm run dev:api        # wrangler dev -> http://localhost:8787
+npm run dev            # Vite :5173, con /api proxied a :8787
+```
+
+En dev, `APP_URL` en [`wrangler.toml`](wrangler.toml) debe ser `http://localhost:5173`
+y `GOOGLE_CLIENT_ID` tu client id de pruebas.
 
 ## Scripts
 
-| Script            | Descripción                                              |
-| ----------------- | ------------------------------------------------------- |
-| `npm run dev`     | Servidor de desarrollo con recarga en caliente.        |
-| `npm run build`   | Comprobación de tipos (`tsc -b`) y build de producción en `dist/`. |
-| `npm run preview` | Sirve localmente el build de `dist/`.                  |
-| `npm run lint`    | ESLint sobre todo el proyecto (0 warnings permitidos). |
-| `npm run test`    | Tests unitarios con Vitest (una pasada).               |
-| `npm run test:watch` | Tests en modo watch.                               |
+| Script                 | Descripción                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `npm run dev`          | Frontend con recarga en caliente (Vite).                     |
+| `npm run dev:api`      | API local: `wrangler dev` (Worker + D1 local + `.dev.vars`). |
+| `npm run build`        | `tsc -b` (frontend + worker) y build de producción en `dist/`. |
+| `npm run preview`      | Sirve el build de `dist/`.                                   |
+| `npm run lint`         | ESLint (0 warnings).                                         |
+| `npm run typecheck`    | Solo comprobación de tipos.                                  |
+| `npm run test`         | Tests unitarios con Vitest.                                  |
+| `npm run db:migrate:local` | Aplica `migrations/` a la D1 local.                      |
+| `npm run db:migrate`   | Aplica `migrations/` a la D1 remota.                         |
+| `npm run deploy`       | `build` + `wrangler deploy`.                                 |
 
 ## Estructura del proyecto
 
 ```
-public/                 Recursos estáticos, iconos PWA, _redirects y _headers
+public/                 Recursos estáticos, iconos PWA y _headers
+migrations/              Migraciones SQL de Cloudflare D1
+  0001_init.sql
+worker/                  Backend (Cloudflare Worker)
+  index.ts               Router: sirve ASSETS y la API /api/*
+  google.ts              Google OAuth (code flow)
+  session.ts             Cookie de sesión firmada (HMAC)
+  db.ts                  Acceso a D1, parametrizado y por user_id
+  validate.ts            Validación de payloads
+  ratelimit.ts           Rate limiting básico de /api/auth/*
+  __tests__/             Tests de sesión, validación y aislamiento
 src/
-  components/            Componentes reutilizables de UI
-    ui/                  Card, Badge, StatTile, EmptyState, AlertBanner, ...
-    charts/              Gráficas con Recharts
-  lib/                   Lógica pura y testeable
-    dates.ts             Utilidades de fecha sin dependencias
-    planTemplates.ts     Datos del plan obligatorio de seis meses
-    plan.ts              Generación del plan y semanas de descarga
-    calculations.ts      Horas semanales, salida larga, carga, rachas, series
-    milestones.ts        Detección automática de hitos
-    alerts.ts            Alertas de dolor, progresión y recuperación
-    strength.ts          Catálogo de ejercicios y rutinas de fuerza
-    storage.ts           Persistencia y (de)serialización JSON en localStorage
-    selectors.ts         Selectores derivados para las vistas
-    labels.ts            Etiquetas en español para los enums
+  components/            Componentes de UI (ui/, charts/, Sync*, Migrar*)
+  lib/
+    plan.ts / planTemplates.ts   Plan obligatorio de seis meses
+    calculations.ts / milestones.ts / alerts.ts / coaching.ts
+    storage.ts            Persistencia local + migración v1→v2
+    api.ts               Cliente de /api/*
+    syncEngine.ts        Merge de sincronización (LWW, puro y testeable)
   store/
-    appData.ts           Reducer del estado global (sin React)
-    AppDataProvider.tsx  Contexto de React + hook useAppData
+    appData.ts           Reducer (sin React); sella updatedAt, crea tombstones
+    AppDataProvider.tsx  Contexto + orquestación de auth y sincronización
   pages/                 Una página por ruta
-  test/                  Configuración y factorías de test
+  test/                  Configuración y factorías
 ```
 
 ### Modelo de datos
 
-`UserSettings`, `Workout`, `PlanMonth`, `StrengthSession`, `Milestone` y `AppData`
-están definidos con tipos estrictos en [`src/types/index.ts`](src/types/index.ts).
-No se usa `any` en el proyecto. Las fechas se guardan como cadenas ISO `YYYY-MM-DD`.
+Tipos estrictos en [`src/types/index.ts`](src/types/index.ts). Entidades
+sincronizables (`Workout`, `StrengthSession`, `Milestone`, `UserSettings`) llevan
+`updatedAt` (ISO datetime) y `deletedAt`; los borrados se registran como `tombstones`
+en `AppData`. Las fechas de calendario siguen siendo `YYYY-MM-DD`.
 
-Todo se persiste en `localStorage` bajo la clave `pedalea-a-polonia:v1`.
+En D1 (ver [`migrations/0001_init.sql`](migrations/0001_init.sql)): `users`,
+`user_settings`, `workouts`, `strength_sessions`, `milestones`, `sync_metadata`. Cada
+fila pertenece a un `user_id` (PK compuesta `(user_id, id)`, índice por
+`(user_id, updated_at)`). El objeto completo se guarda como JSON en `data` y además
+se materializan `updated_at` / `deleted_at` para resolver conflictos e indexar.
+
+## Cuenta y sincronización (Fase 1 de persistencia)
+
+### Decisión de arquitectura: Worker, no Pages Functions
+
+El repo se despliega como **Worker con Static Assets** (`wrangler deploy`), no como
+Pages. Por eso la API vive en el **mismo Worker** ([`worker/index.ts`](worker/index.ts)):
+`run_worker_first = ["/api/*"]` en [`wrangler.toml`](wrangler.toml) hace que `/api/*`
+pase por el código antes que el fallback SPA de los assets; el resto de rutas las sirve
+`env.ASSETS`. Un solo despliegue, una sola config, el binding de D1 en un único sitio.
+
+### Cómo funciona
+
+- **Sin sesión:** todo en `localStorage`, como antes.
+- **Al iniciar sesión:** se descarga el estado de la cuenta (`GET /api/sync`). Si la
+  cuenta está vacía y hay datos locales, un diálogo pregunta si **copiarlos a la cuenta**
+  o **empezar la cuenta vacía** (sin duplicados: el `id` de cada fila es la clave).
+- **En uso normal:** cada cambio local se sube con *debounce* de 1,5 s
+  (`POST /api/sync`, solo filas modificadas). Estado visible en la cabecera y en Ajustes:
+  *Sincronizado / Guardando… / Pendiente / Sin conexión / Error*.
+- **Sin red:** se sigue registrando y editando en local; al volver la conexión se
+  reintenta el envío automáticamente.
+- **Conflictos:** *gana el más reciente* por `updatedAt` (`resolveRow` / `incomingWins`,
+  aisladas para poder cambiar la política más adelante).
+- **Sesión:** cookie `pp_session` firmada con HMAC-SHA256 (`SESSION_SECRET`), `HttpOnly`,
+  `Secure` (en https), `SameSite=Lax`, 30 días. El logout borra la cookie; los datos
+  locales se conservan. La exportación JSON sigue disponible como copia de seguridad.
+
+### Variables y secretos
+
+| Nombre                 | Dónde                          | Qué es |
+| ---------------------- | ------------------------------ | ------ |
+| `APP_URL`              | `wrangler.toml` `[vars]` / panel | URL pública sin barra final. Dev: `http://localhost:5173`. |
+| `GOOGLE_CLIENT_ID`     | `wrangler.toml` `[vars]` / panel | Client ID de Google OAuth (no es secreto). |
+| `GOOGLE_CLIENT_SECRET` | `.dev.vars` (local) / `wrangler secret` (prod) | Client secret de Google. |
+| `SESSION_SECRET`       | `.dev.vars` (local) / `wrangler secret` (prod) | Cadena aleatoria larga (`openssl rand -base64 48`). |
+
+Nunca se guardan secretos en el repo. [`.dev.vars`](.dev.vars.example) está en
+`.gitignore`.
+
+### Pasos manuales para activar la cuenta
+
+**1. Google Cloud Console** — https://console.cloud.google.com/apis/credentials
+
+1. *Crear credenciales → ID de cliente de OAuth → Aplicación web*.
+2. *Orígenes autorizados de JavaScript*:
+   `http://localhost:5173` y `https://TU-DOMINIO` (el de tu Worker o dominio propio).
+3. *URIs de redirección autorizados*:
+   `http://localhost:5173/api/auth/callback` y `https://TU-DOMINIO/api/auth/callback`.
+4. Copia el **Client ID** y el **Client secret**. Configura la *pantalla de
+   consentimiento* (tipo Externo; con tu correo como usuario de prueba basta).
+
+**2. Cloudflare D1**
+
+```bash
+npx wrangler login
+npx wrangler d1 create pedalea_a_polonia
+# pega el database_id que devuelve en wrangler.toml -> [[d1_databases]].database_id
+npx wrangler d1 migrations apply pedalea_a_polonia --remote
+```
+
+**3. Variables y secretos del Worker**
+
+- En [`wrangler.toml`](wrangler.toml) pon `APP_URL` = URL pública real y
+  `GOOGLE_CLIENT_ID` = tu client id. (O ponlos como *Variables* en el panel de
+  Cloudflare → tu Worker → *Settings → Variables*.)
+- Secretos:
+  ```bash
+  npx wrangler secret put GOOGLE_CLIENT_SECRET
+  npx wrangler secret put SESSION_SECRET
+  ```
+  (o en el panel: *Settings → Variables → Add → Encrypt*).
+
+**4. Desplegar** (ver abajo). Si falta `GOOGLE_CLIENT_ID`/`SECRET`/`SESSION_SECRET`,
+la app sigue funcionando en modo local y Ajustes muestra "inicio de sesión no
+configurado"; el endpoint `/api/auth/login` responde `503` en vez de simular un login.
 
 ## Tests
 
@@ -144,49 +256,44 @@ Todo se persiste en `localStorage` bajo la clave `pedalea-a-polonia:v1`.
 npm run test
 ```
 
-Cubren, entre otros:
-
-- cálculo de horas semanales (planificadas y realizadas),
-- detección de hitos,
-- semanas de descarga y factor de reducción,
-- alerta de dolor y alerta de progresión brusca,
-- exportación/importación JSON.
+Cubren, entre otros: horas semanales, detección de hitos, semanas de descarga, alertas
+de dolor y de progresión brusca, export/import JSON, **merge de sincronización**
+(LWW, tombstones, migración inicial), **firma/caducidad de sesión**, **validación de
+payloads** y **aislamiento por `user_id`**.
 
 ## PWA y uso offline
 
-`vite-plugin-pwa` genera el `manifest` y un service worker con `autoUpdate` que
-precachea la aplicación. Tras el primer `npm run build` + `npm run preview` (o el
-primer despliegue) la app es **instalable** y funciona sin conexión. Como no hay
-backend ni APIs externas, toda la funcionalidad está disponible offline.
+`vite-plugin-pwa` genera el `manifest` y un service worker (`autoUpdate`) que precachea
+la app. `/api/*` queda fuera del precacheo y del fallback SPA (estrategia `NetworkOnly`).
+Tras el primer `npm run build` + `preview` (o el primer despliegue) la app es
+**instalable** y funciona sin conexión; con cuenta, los cambios hechos offline se
+sincronizan al reconectar.
 
-## Despliegue en Cloudflare Pages (gratis)
+## Despliegue en Cloudflare (gratis)
 
-### Opción A — desde el panel de Cloudflare (Git)
+Se despliega como **Worker con Static Assets** (no Pages). Config en
+[`wrangler.toml`](wrangler.toml): `main`, `[assets]` (`binding`, `not_found_handling`,
+`run_worker_first`), `[[d1_databases]]` y `[vars]`.
 
-1. Sube este repositorio a GitHub/GitLab.
-2. En el panel de Cloudflare: **Workers & Pages → Create → Pages → Connect to Git**.
-3. Selecciona el repositorio y configura:
-   - **Framework preset:** `None` (o `Vite`).
+### Desde el panel (Git)
+
+1. `git push` del repo a GitHub.
+2. Cloudflare → **Workers & Pages → Create → Workers → Import a repository** → elige el
+   repo.
+3. Ajustes de build:
    - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Node version:** define la variable de entorno `NODE_VERSION` = `20`
-     (pestaña *Settings → Environment variables*).
-4. **Save and Deploy**.
+   - **Deploy command:** `npx wrangler deploy`
+   - Node 20 (se toma de `.node-version`).
+4. Antes o después del primer deploy, completa los **pasos manuales** de arriba
+   (D1 + migraciones + variables + secretos).
+5. Cada `git push` a `main` redespliega.
 
-El archivo [`public/_redirects`](public/_redirects) con la regla
-`/*  /index.html  200` ya está incluido para que el enrutado de React Router
-funcione en recargas y rutas profundas. [`public/_headers`](public/_headers)
-ajusta el cacheo del service worker y de los assets.
-
-### Opción B — con Wrangler (CLI)
+### Con Wrangler (CLI)
 
 ```bash
-npm install --global wrangler
 npm run build
-wrangler pages deploy dist --project-name pedalea-a-polonia
+npx wrangler deploy
 ```
-
-La configuración base para Pages está en [`wrangler.toml`](wrangler.toml).
 
 ## Descargo
 
