@@ -1,11 +1,18 @@
-# Configuracion para desplegar en Cloudflare Pages.
-#   Build command:            npm run build
-#   Build output directory:   dist
+# Despliegue en Cloudflare (Worker con archivos estaticos / SPA).
+#
+# En el panel de Cloudflare -> tu proyecto -> Settings -> Build:
+#   Build command:   npm run build
+#   Deploy command:  npx wrangler deploy   (valor por defecto)
+#   Version de Node: se toma de .node-version (20)
 #
 # Despliegue con CLI:
 #   npm run build
-#   wrangler pages deploy dist --project-name pedalea-a-polonia
+#   npx wrangler deploy
 
-name = "pedalea-a-polonia"
-pages_build_output_dir = "dist"
+name = "bikepacking"
 compatibility_date = "2024-09-01"
+
+[assets]
+directory = "./dist"
+# Sirve index.html para cualquier ruta desconocida: necesario para React Router.
+not_found_handling = "single-page-application"
