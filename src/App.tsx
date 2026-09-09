@@ -7,6 +7,7 @@ import { RegistroPage } from './pages/RegistroPage';
 import { ProgresoPage } from './pages/ProgresoPage';
 import { FuerzaPage } from './pages/FuerzaPage';
 import { AjustesPage } from './pages/AjustesPage';
+import { MasPage } from './pages/MasPage';
 import { NoEncontradoPage } from './pages/NoEncontradoPage';
 
 export default function App(): JSX.Element {
@@ -20,6 +21,7 @@ export default function App(): JSX.Element {
         <Route path="progreso" element={<ProgresoPage />} />
         <Route path="fuerza" element={<FuerzaPage />} />
         <Route path="ajustes" element={<AjustesPage />} />
+        <Route path="mas" element={<MasPage />} />
         <Route path="*" element={<NoEncontradoPage />} />
       </Route>
     </Routes>

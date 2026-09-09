@@ -107,6 +107,17 @@ export function PlanPage(): JSX.Element {
                         {isDeloadWeek(weekNumber) && <Badge tone="recuperacion">Descarga</Badge>}
                         {isTaperWeek(weekNumber) && <Badge tone="alerta">Afinamiento</Badge>}
                       </div>
+                      {isDeloadWeek(weekNumber) && (
+                        <p className="mb-2 text-xs text-recuperacion">
+                          Semana de recuperacion: se reduce el volumen para consolidar la adaptacion.
+                          No la compenses aumentando otras salidas.
+                        </p>
+                      )}
+                      {isTaperWeek(weekNumber) && (
+                        <p className="mb-2 text-xs text-alerta">
+                          Afinamiento: salidas cortas y dos dias de descanso antes del viaje.
+                        </p>
+                      )}
                       <div className="space-y-2">
                         {list.map((w) => (
                           <WorkoutRow key={w.id} workout={w} />

@@ -16,16 +16,42 @@ import {
   todayISO,
   weekdayShort,
 } from '../lib/dates';
-import { WORKOUT_TYPE_LABEL } from '../lib/labels';
+import { STATUS_LABEL, STATUS_MARK, WORKOUT_TYPE_LABEL } from '../lib/labels';
 import { workoutsOnDate } from '../lib/selectors';
+import { rescheduleImpact } from '../lib/coaching';
+import type { WorkoutStatus } from '../types';
 
 type View = 'semana' | 'mes';
+
+interface UndoInfo {
+  id: string;
+  fromDate: string;
+  toDate: string;
+  impact: string;
+}
+
+const MARK_TONE: Record<WorkoutStatus, string> = {
+  planned: 'text-recuperacion',
+  completed: 'text-bosque',
+  partial: 'text-recuperacion',
+  skipped: 'text-alerta',
+};
 
 export function CalendarioPage(): JSX.Element {
   const { data, rescheduleWorkout } = useAppData();
   const [view, setView] = useState<View>('semana');
   const [cursor, setCursor] = useState<string>(todayISO());
   const [selectedDay, setSelectedDay] = useState<string>(todayISO());
+  const [undo, setUndo] = useState<UndoInfo | null>(null);
+
+  const move = (id: string, fromDate: string, toDate: string): void => {
+    if (!toDate || toDate === fromDate) return;
+    const workout = data.workouts.find((w) => w.id === id);
+    const impact = workout ? rescheduleImpact(data.workouts, workout, toDate) : '';
+    rescheduleWorkout(id, toDate);
+    setSelectedDay(toDate);
+    setUndo({ id, fromDate, toDate, impact });
+  };
 
   const weekStart = startOfWeek(cursor);
   const weekDays = useMemo(
@@ -93,6 +119,35 @@ export function CalendarioPage(): JSX.Element {
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-texto-suave">
+        {(['planned', 'completed', 'partial', 'skipped'] as WorkoutStatus[]).map((s) => (
+          <span key={s} className="flex items-center gap-1">
+            <span className={`font-bold ${MARK_TONE[s]}`}>{STATUS_MARK[s]}</span>
+            {STATUS_LABEL[s]}
+          </span>
+        ))}
+      </div>
+
+      {undo && (
+        <div className="flex items-start justify-between gap-3 rounded-2xl border border-recuperacion-claro bg-recuperacion-suave p-3">
+          <p className="text-sm text-texto">
+            <span className="font-semibold">Salida movida a {formatShortDate(undo.toDate)}.</span>{' '}
+            {undo.impact}
+          </p>
+          <button
+            type="button"
+            className="boton-secundario shrink-0 px-3 py-1 text-sm"
+            onClick={() => {
+              rescheduleWorkout(undo.id, undo.fromDate);
+              setSelectedDay(undo.fromDate);
+              setUndo(null);
+            }}
+          >
+            Deshacer
+          </button>
+        </div>
+      )}
+
       {view === 'semana' ? (
         <Card
           title={`Semana del ${formatShortDate(weekStart)}`}
@@ -118,20 +173,18 @@ export function CalendarioPage(): JSX.Element {
                   <span className={isToday ? 'font-bold text-bosque' : ''}>
                     {parseISODate(day).getDate()}
                   </span>
-                  <span className="mt-1 flex gap-0.5">
+                  <span className="mt-1 flex gap-0.5 font-bold leading-none" aria-hidden="true">
                     {list.slice(0, 3).map((w) => (
-                      <span
-                        key={w.id}
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          w.status === 'completed'
-                            ? 'bg-bosque'
-                            : w.status === 'skipped'
-                              ? 'bg-alerta'
-                              : 'bg-recuperacion-claro'
-                        }`}
-                      />
+                      <span key={w.id} className={MARK_TONE[w.status]}>
+                        {STATUS_MARK[w.status]}
+                      </span>
                     ))}
                   </span>
+                  {list.length > 0 && (
+                    <span className="sr-only">
+                      {list.length} entrenamiento(s): {list.map((w) => STATUS_LABEL[w.status]).join(', ')}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -165,7 +218,13 @@ export function CalendarioPage(): JSX.Element {
                     {parseISODate(day).getDate()}
                   </span>
                   {list.length > 0 && (
-                    <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-recuperacion-claro" />
+                    <span
+                      className={`mt-0.5 text-[11px] font-bold leading-none ${MARK_TONE[list[0]?.status ?? 'planned']}`}
+                      aria-hidden="true"
+                    >
+                      {STATUS_MARK[list[0]?.status ?? 'planned']}
+                      {list.length > 1 ? `·${list.length}` : ''}
+                    </span>
                   )}
                 </button>
               );
@@ -191,14 +250,16 @@ export function CalendarioPage(): JSX.Element {
                     type="date"
                     className="campo"
                     value={w.date}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        rescheduleWorkout(w.id, e.target.value);
-                        setSelectedDay(e.target.value);
-                      }
-                    }}
+                    onChange={(e) => move(w.id, w.date, e.target.value)}
                   />
                 </label>
+                {(w.workoutType === 'salida_larga' ||
+                  w.workoutType === 'cargada' ||
+                  w.workoutType === 'simulacion') && (
+                  <p className="text-xs text-texto-suave">
+                    Salida clave de la semana: al moverla, revisa la recuperacion del dia siguiente.
+                  </p>
+                )}
               </div>
             ))}
           </div>

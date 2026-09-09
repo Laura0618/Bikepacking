@@ -1,4 +1,4 @@
-# Pedalea 
+# Pedalea a Polonia
 
 Aplicación web para planificar y seguir, durante seis meses, la preparación de un
 viaje en bicicleta de varios días con equipaje.
@@ -9,19 +9,38 @@ dolor a aguantar varios días seguidos de 2–3 h con la bici cargada.
 
 ## Características
 
-- **Inicio / Hoy** (`/`): próximo entrenamiento, progreso semanal, racha de días,
-  carga actual y alertas de recuperación.
+Navegación inferior de 5 destinos (**Hoy · Plan · Calendario · Progreso · Más**) y un
+botón persistente **Registrar salida** visible desde cualquier pantalla.
+
+- **Inicio / Hoy** (`/`): tarjeta "¿Qué hago hoy?" con duración, nota de ritmo y
+  **por qué** toca esa sesión, más acciones de baja fricción (marcar hecha, versión
+  corta de 30–40 min, mover, cambiar por descanso). Progreso semanal, racha, carga
+  actual y alertas de recuperación.
 - **Plan** (`/plan`): plan de seis meses (24 semanas) con detalle semanal, semanas de
-  descarga y afinamiento, e hito objetivo de cada mes.
-- **Calendario** (`/calendario`): vista semanal y mensual, con reprogramación de
-  entrenamientos.
-- **Registro** (`/registro`): formulario de registro de salidas. La **duración** es la
-  métrica principal; distancia y velocidad son secundarias y opcionales.
-- **Progreso** (`/progreso`): gráficas de horas semanales, salida más larga, carga de
-  equipaje y días consecutivos, más los hitos automáticos.
-- **Fuerza** (`/fuerza`): rutinas y ejercicios recomendados y registro de sesiones.
+  descarga y afinamiento explicadas, e hito objetivo de cada mes.
+- **Calendario** (`/calendario`): vista semanal y mensual. Estados con marca textual
+  además del color, leyenda, reprogramación con **previsualización de impacto** y
+  **deshacer**.
+- **Registro** (`/registro`): pensado para menos de 30 s. Primero el estado con botones
+  grandes, luego la **duración** (control ±5 min) como métrica principal, y sensaciones
+  con escalas verbales de esfuerzo y dolor (anclajes 0/3/5/7/10). Distancia y velocidad
+  quedan plegadas como secundarias. Tras guardar, devuelve una observación útil.
+- **Progreso** (`/progreso`): **estado de preparación** con condiciones concretas
+  ("te falta una salida de 3 h con carga"), no una puntuación opaca. Gráficas de horas
+  semanales, salida más larga, carga de equipaje y días consecutivos, cada una con su
+  tabla de datos accesible. Hitos automáticos. Muestra "sin registro" en vez de 0.
+- **Más** (`/mas`): acceso a Fuerza (`/fuerza`), Registro y Ajustes (`/ajustes`), guía
+  de uso y privacidad.
 - **Ajustes** (`/ajustes`): fechas, días preferidos, unidades, regeneración del plan,
   exportación/importación JSON y reinicio de datos con confirmación.
+
+### Decisiones de UX aplicadas
+
+El diseño sigue [`mejores_practicas_ux_pedalea_a_polonia.md`](mejores_practicas_ux_pedalea_a_polonia.md):
+el tiempo domina sobre km/velocidad, descansar se presenta como acción completa (no
+como fallo), el plan es adaptable con límites visibles (no se suben duración y carga a
+la vez, no se compensan las semanas de descarga), y el microcopy es sereno y no
+culpabilizador ("sesión no realizada" en lugar de "fallo").
 
 ### Hitos automáticos
 
