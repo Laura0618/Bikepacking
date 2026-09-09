@@ -1,4 +1,4 @@
-# Pedalea a Polonia
+# Pedalea 
 
 Aplicación web para planificar y seguir, durante seis meses, la preparación de un
 viaje en bicicleta de varios días con equipaje.
