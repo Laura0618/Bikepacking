@@ -25,7 +25,7 @@ export function painAlert(workout: Workout): AppAlert | null {
   if (workout.painLevel !== undefined && workout.painLevel >= PAIN_THRESHOLD) {
     return {
       id: `pain-${workout.id}`,
-      level: 'alerta',
+      level: 'peligro',
       title: 'Dolor elevado registrado',
       message:
         `Registraste dolor ${workout.painLevel}/10. Para, descansa y no fuerces. ` +

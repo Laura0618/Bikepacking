@@ -126,6 +126,13 @@ export function CalendarioPage(): JSX.Element {
             {STATUS_LABEL[s]}
           </span>
         ))}
+        <span className="flex items-center gap-1">
+          <span aria-hidden="true">🌙</span> Descanso
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="rounded bg-recuperacion-suave px-1 font-bold text-recuperacion">kg</span>{' '}
+          Con equipaje
+        </span>
       </div>
 
       {undo && (

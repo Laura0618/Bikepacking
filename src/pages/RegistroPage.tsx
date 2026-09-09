@@ -145,7 +145,7 @@ export function RegistroPage(): JSX.Element {
         <AlertBanner
           alert={{
             id: 'pain-preview',
-            level: 'alerta',
+            level: 'peligro',
             title: 'Dolor de 5/10 o mas',
             message:
               'Para la salida, descansa y no fuerces. Si el dolor sigue varios dias, consulta a un profesional de la salud.',
@@ -241,7 +241,7 @@ export function RegistroPage(): JSX.Element {
                     className={`min-h-touch rounded-xl border px-3 text-sm font-semibold ${
                       form.painLevel === a.value
                         ? a.value >= 5
-                          ? 'border-alerta bg-alerta text-white'
+                          ? 'border-peligro bg-peligro text-white'
                           : 'border-bosque bg-bosque text-white'
                         : 'border-bosque-suave bg-superficie text-texto-suave'
                     }`}

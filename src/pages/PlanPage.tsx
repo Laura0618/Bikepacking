@@ -5,7 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { PageHeader } from '../components/ui/PageHeader';
 import { WorkoutRow } from '../components/WorkoutRow';
-import { formatMinutes, formatShortDate } from '../lib/dates';
+import { diffInDays, formatMinutes, formatShortDate, todayISO } from '../lib/dates';
 import { isDeloadWeek, isTaperWeek, MONTH_MILESTONE_HINTS } from '../lib/plan';
 import { PLAN_MONTHS_META } from '../lib/planTemplates';
 import { sortByDate } from '../lib/selectors';
@@ -18,7 +18,15 @@ export function PlanPage(): JSX.Element {
     [data.workouts],
   );
 
-  const [openMonth, setOpenMonth] = useState<number>(1);
+  const today = todayISO();
+  const elapsedWeeks = Math.floor(diffInDays(data.settings.startDate, today) / 7);
+  const currentWeek = Math.min(24, Math.max(1, elapsedWeeks + 1));
+  const currentMonth = Math.min(6, Math.max(1, Math.ceil(currentWeek / 4)));
+  const beforeStart = diffInDays(data.settings.startDate, today) < 0;
+
+  const nextMilestone = data.milestones.find((m) => !m.achievedAt);
+
+  const [openMonth, setOpenMonth] = useState<number>(currentMonth);
 
   const byMonth = useMemo(() => {
     const map = new Map<number, Map<number, Workout[]>>();
@@ -47,16 +55,45 @@ export function PlanPage(): JSX.Element {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Plan de seis meses"
-        subtitle="24 semanas. De 45-60 min a varios dias seguidos de 2-3 h con equipaje."
+        title="Plan hacia la ruta"
+        subtitle={beforeStart ? 'El plan empieza en la fecha de inicio.' : `Mes ${currentMonth} de 6`}
       />
+
+      <Card>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="text-sm">
+            <span className="font-semibold text-bosque">Ahora: </span>
+            {PLAN_MONTHS_META[currentMonth - 1]?.focus}
+          </p>
+          <p className="text-sm text-texto-suave">
+            Proximo hito: {nextMilestone ? nextMilestone.label : 'todos logrados'}
+          </p>
+        </div>
+        <p className="mt-2 text-sm text-texto-suave">
+          Semana {currentWeek} de 24 ·{' '}
+          {PLAN_MONTHS_META[currentMonth - 1]?.weeklyHoursMin}-
+          {PLAN_MONTHS_META[currentMonth - 1]?.weeklyHoursMax} h previstas
+        </p>
+        <button
+          type="button"
+          className="boton-primario mt-3"
+          onClick={() => setOpenMonth(currentMonth)}
+        >
+          Ver semana actual
+        </button>
+      </Card>
 
       {PLAN_MONTHS_META.map((meta) => {
         const weeks = byMonth.get(meta.monthNumber);
         const isOpen = openMonth === meta.monthNumber;
+        const isPast = !beforeStart && meta.monthNumber < currentMonth;
+        const isCurrent = !beforeStart && meta.monthNumber === currentMonth;
         const weekNumbers = weeks ? Array.from(weeks.keys()).sort((a, b) => a - b) : [];
         return (
-          <Card key={meta.monthNumber}>
+          <Card
+            key={meta.monthNumber}
+            className={isCurrent ? 'border-bosque ring-1 ring-bosque' : undefined}
+          >
             <button
               type="button"
               className="flex w-full items-center justify-between gap-3 text-left"
@@ -67,6 +104,16 @@ export function PlanPage(): JSX.Element {
                 <span className="text-base font-bold text-bosque-oscuro">
                   Mes {meta.monthNumber}
                 </span>
+                {isPast && (
+                  <span className="ml-2 align-middle" aria-label="mes pasado">
+                    <Badge tone="bosque">✓ hecho</Badge>
+                  </span>
+                )}
+                {isCurrent && (
+                  <span className="ml-2 align-middle">
+                    <Badge tone="recuperacion">Ahora</Badge>
+                  </span>
+                )}
                 <span className="ml-2 text-sm text-texto-suave">
                   {meta.weeklyHoursMin}-{meta.weeklyHoursMax} h/semana · larga hasta{' '}
                   {formatMinutes(meta.longestRideMinutes)}

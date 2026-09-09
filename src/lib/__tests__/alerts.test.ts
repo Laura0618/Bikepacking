@@ -6,7 +6,7 @@ describe('painAlert', () => {
   it('avisa cuando el dolor es 5/10 o mas', () => {
     const alert = painAlert(makeWorkout({ painLevel: 5 }));
     expect(alert).not.toBeNull();
-    expect(alert?.level).toBe('alerta');
+    expect(alert?.level).toBe('peligro');
     expect(alert?.message).toMatch(/consulta a un profesional/i);
   });
 
@@ -59,7 +59,7 @@ describe('recoveryAlert y collectAlerts', () => {
       ...Array.from({ length: 6 }, (_, i) => makeWorkout({ date: `2026-06-0${i + 1}` })),
     ];
     const alerts = collectAlerts(workouts, '2026-06-06');
-    expect(alerts[0]?.level).toBe('alerta');
+    expect(alerts[0]?.level).toBe('peligro');
     expect(alerts.some((a) => a.level === 'recuperacion')).toBe(true);
   });
 });

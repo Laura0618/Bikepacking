@@ -123,7 +123,7 @@ export interface AppData {
   planGeneratedAt: string | null;
 }
 
-export type AlertLevel = 'recuperacion' | 'alerta';
+export type AlertLevel = 'recuperacion' | 'alerta' | 'peligro';
 
 export interface AppAlert {
   id: string;

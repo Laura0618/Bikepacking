@@ -196,7 +196,7 @@ const MILESTONE_NEXT_STEP: Record<string, string> = {
 
 export function preparationStatus(data: AppData, refISO: string): PreparacionEstado {
   const alerts = collectAlerts(data.workouts, refISO);
-  const hayDolor = alerts.some((a) => a.level === 'alerta' && a.id.startsWith('pain-'));
+  const hayDolor = alerts.some((a) => a.id.startsWith('pain-'));
 
   const condiciones = data.milestones.map((m: Milestone) => ({
     label: m.label,

@@ -18,6 +18,7 @@ interface TrendChartProps {
   color?: string;
   unit?: string;
   name: string;
+  domain?: [number, number];
 }
 
 export function TrendChart({
@@ -25,6 +26,7 @@ export function TrendChart({
   color = '#2f5d3a',
   unit = '',
   name,
+  domain,
 }: TrendChartProps): JSX.Element {
   return (
     <div className="h-56 w-full">
@@ -32,7 +34,12 @@ export function TrendChart({
         <LineChart data={data} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e6efe6" />
           <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11 }} unit={unit ? ` ${unit}` : ''} width={44} />
+          <YAxis
+            tick={{ fontSize: 11 }}
+            unit={unit ? ` ${unit}` : ''}
+            width={44}
+            domain={domain ?? ['auto', 'auto']}
+          />
           <Tooltip
             formatter={(value: number) => [`${value}${unit ? ` ${unit}` : ''}`, name]}
             labelFormatter={(label: string) => `Semana del ${label}`}

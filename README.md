@@ -34,13 +34,26 @@ botón persistente **Registrar salida** visible desde cualquier pantalla.
 - **Ajustes** (`/ajustes`): fechas, días preferidos, unidades, regeneración del plan,
   exportación/importación JSON y reinicio de datos con confirmación.
 
-### Decisiones de UX aplicadas
+### Decisiones de UX y diseño aplicadas
 
-El diseño sigue [`mejores_practicas_ux_pedalea_a_polonia.md`](mejores_practicas_ux_pedalea_a_polonia.md):
-el tiempo domina sobre km/velocidad, descansar se presenta como acción completa (no
-como fallo), el plan es adaptable con límites visibles (no se suben duración y carga a
-la vez, no se compensan las semanas de descarga), y el microcopy es sereno y no
-culpabilizador ("sesión no realizada" en lugar de "fallo").
+El producto sigue [`mejores_practicas_ux_pedalea_a_polonia.md`](mejores_practicas_ux_pedalea_a_polonia.md)
+y [`guia_diseno_pedalea_a_polonia.md`](guia_diseno_pedalea_a_polonia.md):
+
+- El tiempo domina sobre km/velocidad; descansar es acción completa, no fallo.
+- Plan adaptable con límites visibles (no subir duración y carga a la vez, no compensar
+  las semanas de descarga).
+- En **Hoy**, "Registrar al volver" abre un **panel de registro rápido** (~15 s:
+  duración, dolor, esfuerzo, nota) en vez de marcar hecho sin sensaciones; toda acción
+  tiene **Deshacer** durante 10 s. La métrica se llama "Días activos seguidos", no
+  "racha", con recordatorio de que los descansos previstos protegen el plan.
+- **Plan** con cabecera "Mes X de 6", mes actual resaltado y auto-expandido, meses
+  pasados marcados; el resto plegado.
+- **Progreso**: sin datos muestra un único siguiente paso, no cuatro gráficas vacías;
+  cada gráfica lleva una frase de lectura y tabla accesible; la carga usa escala fija a
+  9 kg (objetivo del viaje).
+- Tokens de color semánticos: verde bosque (acción), azul (recuperación), ámbar
+  (`caution`, progresión brusca) y rojo (`danger`, dolor ≥ 5/10 e irreversibles),
+  siempre con texto/icono además del color. Se respeta `prefers-reduced-motion`.
 
 ### Hitos automáticos
 

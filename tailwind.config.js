@@ -13,9 +13,14 @@ export default {
           suave: '#e6efe6',
         },
         alerta: {
-          DEFAULT: '#d98a3d',
-          claro: '#f0c58c',
+          DEFAULT: '#a65b19',
+          claro: '#e0a15f',
           suave: '#fbeedd',
+        },
+        peligro: {
+          DEFAULT: '#b42318',
+          claro: '#f0a59d',
+          suave: '#fee4e2',
         },
         recuperacion: {
           DEFAULT: '#3d7fa6',
