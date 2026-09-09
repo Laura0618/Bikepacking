@@ -1,12 +1,20 @@
 // Persistencia en localStorage y (de)serializacion de los datos de la app.
 
-import type { AppData, UserSettings, Workout } from '../types';
-import { addDays, todayISO } from './dates';
+import type {
+  AppData,
+  Milestone,
+  StrengthSession,
+  Tombstone,
+  UserSettings,
+  Workout,
+} from '../types';
+import { addDays, nowISO, todayISO } from './dates';
 import { initialMilestones, reconcileMilestones } from './milestones';
 import { generatePlan } from './plan';
 
 export const STORAGE_KEY = 'pedalea-a-polonia:v1';
-export const DATA_VERSION = 1;
+/** v1: sin sincronizacion. v2: campos updatedAt/deletedAt + tombstones. */
+export const DATA_VERSION = 2;
 
 export function defaultSettings(startDate: string = todayISO()): UserSettings {
   return {
@@ -14,6 +22,8 @@ export function defaultSettings(startDate: string = todayISO()): UserSettings {
     tripDate: addDays(startDate, 7 * 26), // ~6 meses
     preferredTrainingDays: [2, 4, 6], // martes, jueves, sabado
     units: 'metric',
+    updatedAt: nowISO(),
+    deletedAt: null,
   };
 }
 
@@ -27,12 +37,36 @@ export function createInitialData(startDate: string = todayISO()): AppData {
     workouts: plan.workouts,
     strengthSessions: plan.strengthSessions,
     milestones: initialMilestones(),
-    planGeneratedAt: new Date().toISOString(),
+    planGeneratedAt: nowISO(),
+    tombstones: [],
   };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/** Anade updatedAt/deletedAt a filas que vengan de la version 1 (sin esos campos). */
+function migrateRow<T extends { updatedAt?: unknown; deletedAt?: unknown }>(
+  row: T,
+  stamp: string,
+): T & { updatedAt: string; deletedAt: string | null } {
+  return {
+    ...row,
+    updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : stamp,
+    deletedAt: typeof row.deletedAt === 'string' ? row.deletedAt : null,
+  };
+}
+
+function parseTombstones(raw: unknown): Tombstone[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (t): t is Tombstone =>
+      isRecord(t) &&
+      (t.entity === 'workout' || t.entity === 'strengthSession') &&
+      typeof t.id === 'string' &&
+      typeof t.deletedAt === 'string',
+  );
 }
 
 /** Valida de forma tolerante un objeto y lo normaliza a AppData; lanza si es irrecuperable. */
@@ -42,10 +76,14 @@ export function parseAppData(raw: unknown): AppData {
   if (!isRecord(settings) || typeof settings.startDate !== 'string') {
     throw new Error('Faltan los ajustes (startDate).');
   }
-  const workouts = Array.isArray(raw.workouts) ? (raw.workouts as Workout[]) : [];
-  const strengthSessions = Array.isArray(raw.strengthSessions)
-    ? (raw.strengthSessions as AppData['strengthSessions'])
-    : [];
+  const stamp = nowISO();
+
+  const workouts = (Array.isArray(raw.workouts) ? (raw.workouts as Workout[]) : []).map((w) =>
+    migrateRow(w, stamp),
+  );
+  const strengthSessions = (
+    Array.isArray(raw.strengthSessions) ? (raw.strengthSessions as StrengthSession[]) : []
+  ).map((s) => migrateRow(s, stamp));
 
   const normalizedSettings: UserSettings = {
     startDate: settings.startDate,
@@ -59,19 +97,24 @@ export function parseAppData(raw: unknown): AppData {
         ) as UserSettings['preferredTrainingDays'])
       : [2, 4, 6],
     units: settings.units === 'imperial' ? 'imperial' : 'metric',
+    updatedAt: typeof settings.updatedAt === 'string' ? settings.updatedAt : stamp,
+    deletedAt: typeof settings.deletedAt === 'string' ? settings.deletedAt : null,
   };
+
+  const rawMilestones =
+    Array.isArray(raw.milestones) && raw.milestones.length > 0
+      ? (raw.milestones as Milestone[]).map((m) => migrateRow(m, stamp))
+      : initialMilestones();
 
   const base: AppData = {
     version: DATA_VERSION,
     settings: normalizedSettings,
     workouts,
     strengthSessions,
-    milestones:
-      Array.isArray(raw.milestones) && raw.milestones.length > 0
-        ? (raw.milestones as AppData['milestones'])
-        : initialMilestones(),
+    milestones: rawMilestones,
     planGeneratedAt:
-      typeof raw.planGeneratedAt === 'string' ? raw.planGeneratedAt : new Date().toISOString(),
+      typeof raw.planGeneratedAt === 'string' ? raw.planGeneratedAt : nowISO(),
+    tombstones: parseTombstones(raw.tombstones),
   };
 
   return { ...base, milestones: reconcileMilestones(base.milestones, base.workouts) };
@@ -111,4 +154,16 @@ export function exportToJSON(data: AppData): string {
 export function importFromJSON(text: string): AppData {
   const parsed: unknown = JSON.parse(text);
   return parseAppData(parsed);
+}
+
+/** true si el estado local contiene datos creados por la persona (no solo el plan precargado). */
+export function hasUserData(data: AppData): boolean {
+  const touchedWorkout = data.workouts.some(
+    (w) => !w.fromPlan || w.status !== 'planned' || w.actualDurationMinutes !== null,
+  );
+  const touchedStrength = data.strengthSessions.some(
+    (s) => !s.fromPlan || s.status !== 'planned',
+  );
+  const achievedMilestone = data.milestones.some((m) => m.achievedAt !== null);
+  return touchedWorkout || touchedStrength || achievedMilestone;
 }

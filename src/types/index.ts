@@ -5,7 +5,18 @@ export type Units = 'metric' | 'imperial';
 
 export type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = domingo ... 6 = sabado
 
-export interface UserSettings {
+/**
+ * Campos comunes a toda entidad sincronizable con la cuenta.
+ * `updatedAt` es una marca ISO datetime (no solo fecha) para resolver conflictos
+ * por "gana el mas reciente". `deletedAt` marca borrados como tumba (tombstone)
+ * para que la eliminacion se propague entre dispositivos.
+ */
+export interface SyncFields {
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+export interface UserSettings extends SyncFields {
   /** Fecha de inicio del plan (ISO YYYY-MM-DD). */
   startDate: string;
   /** Fecha objetivo del viaje (ISO YYYY-MM-DD). */
@@ -29,7 +40,7 @@ export type Intensity = 'muy_suave' | 'suave' | 'moderado' | 'exigente';
 
 export type WorkoutStatus = 'planned' | 'completed' | 'partial' | 'skipped';
 
-export interface Workout {
+export interface Workout extends SyncFields {
   id: string;
   /** Fecha del entrenamiento (ISO YYYY-MM-DD). */
   date: string;
@@ -86,7 +97,7 @@ export interface StrengthExercise {
   descripcion: string;
 }
 
-export interface StrengthSession {
+export interface StrengthSession extends SyncFields {
   id: string;
   date: string;
   exercises: StrengthExerciseId[];
@@ -104,13 +115,22 @@ export type MilestoneId =
   | 'bloque_tres_dias'
   | 'simulacion_cuatro_dias';
 
-export interface Milestone {
+export interface Milestone extends SyncFields {
   id: MilestoneId;
   label: string;
   /** Descripcion legible de la condicion que lo desbloquea. */
   condition: string;
   /** Fecha ISO en la que se logro, o null si sigue pendiente. */
   achievedAt: string | null;
+}
+
+export type SyncEntityName = 'settings' | 'workout' | 'strengthSession' | 'milestone';
+
+/** Registro de borrado, para propagar la eliminacion entre dispositivos. */
+export interface Tombstone {
+  entity: Extract<SyncEntityName, 'workout' | 'strengthSession'>;
+  id: string;
+  deletedAt: string;
 }
 
 export interface AppData {
@@ -121,6 +141,52 @@ export interface AppData {
   milestones: Milestone[];
   /** Marca de tiempo ISO de la ultima generacion del plan. */
   planGeneratedAt: string | null;
+  /** Borrados pendientes de propagar a la cuenta. */
+  tombstones: Tombstone[];
+}
+
+// --- Cuenta y sincronizacion -------------------------------------------------
+
+/** Usuario autenticado (datos publicos, sin tokens). */
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  picture: string | null;
+}
+
+export type SyncStatus =
+  | 'signed_out' // sin cuenta: solo local
+  | 'synced' // todo subido
+  | 'saving' // enviando cambios
+  | 'pending' // hay cambios sin enviar (p. ej. sin red)
+  | 'offline' // sin conexion
+  | 'error'; // fallo de sincronizacion
+
+/** Conjunto de datos del usuario tal y como viaja por la API. */
+export interface SyncSnapshot {
+  settings: UserSettings | null;
+  workouts: Workout[];
+  strengthSessions: StrengthSession[];
+  milestones: Milestone[];
+}
+
+export interface SyncPullResponse extends SyncSnapshot {
+  serverTime: string;
+  lastSyncAt: string | null;
+}
+
+/** Cambios que el cliente envia (solo filas modificadas). */
+export interface SyncPushRequest {
+  settings: UserSettings | null;
+  workouts: Workout[];
+  strengthSessions: StrengthSession[];
+  milestones: Milestone[];
+}
+
+export interface SyncPushResponse extends SyncPullResponse {
+  /** Filas rechazadas por ser mas antiguas que las del servidor. */
+  conflicts: { entity: string; id: string }[];
 }
 
 export type AlertLevel = 'recuperacion' | 'alerta' | 'peligro';

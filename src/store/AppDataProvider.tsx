@@ -14,16 +14,16 @@ import {
   loadAppData,
   saveAppData,
 } from '../lib/storage';
-import { appDataReducer } from './appData';
+import { appDataReducer, type StrengthSessionInput, type WorkoutInput } from './appData';
 
 interface AppDataContextValue {
   data: AppData;
   updateSettings: (patch: Partial<UserSettings>) => void;
-  addWorkout: (workout: Workout) => void;
+  addWorkout: (workout: WorkoutInput) => void;
   updateWorkout: (id: string, patch: Partial<Workout>) => void;
   deleteWorkout: (id: string) => void;
   rescheduleWorkout: (id: string, newDateISO: string) => void;
-  addStrengthSession: (session: StrengthSession) => void;
+  addStrengthSession: (session: StrengthSessionInput) => void;
   updateStrengthSession: (id: string, patch: Partial<StrengthSession>) => void;
   deleteStrengthSession: (id: string) => void;
   regeneratePlan: () => void;

@@ -100,7 +100,10 @@ export function RegistroPage(): JSX.Element {
       return;
     }
 
-    const base: Omit<Workout, 'id' | 'fromPlan' | 'planMonth' | 'planWeek'> = {
+    const base: Omit<
+      Workout,
+      'id' | 'fromPlan' | 'planMonth' | 'planWeek' | 'updatedAt' | 'deletedAt'
+    > = {
       date: form.date,
       workoutType: form.workoutType,
       intensity: form.intensity,

@@ -97,6 +97,11 @@ export function todayISO(): string {
   return toISODate(new Date());
 }
 
+/** Marca de tiempo completa ISO 8601 (con hora), para `updatedAt` de sincronizacion. */
+export function nowISO(): string {
+  return new Date().toISOString();
+}
+
 /** Devuelve la lista de lunes (ISO) entre dos fechas, inclusive. */
 export function weekStartsBetween(fromISO: string, toISO: string): string[] {
   const result: string[] = [];

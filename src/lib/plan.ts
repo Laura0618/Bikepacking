@@ -2,7 +2,7 @@
 // La logica es pura y deterministica para poder testearla.
 
 import type { PlanMonth, StrengthSession, Workout } from '../types';
-import { addDays, startOfWeek } from './dates';
+import { addDays, nowISO, startOfWeek } from './dates';
 import {
   DELOAD_FACTORS,
   MONTH_BASES,
@@ -79,7 +79,7 @@ function strengthOffsetsForWeek(planWeek: number): number[] {
   return SPECIAL_WEEKS[planWeek]?.strengthDayOffsets ?? [];
 }
 
-export function generatePlan(startDateISO: string): GeneratedPlan {
+export function generatePlan(startDateISO: string, stamp: string = nowISO()): GeneratedPlan {
   const week1Monday = startOfWeek(startDateISO);
   const workouts: Workout[] = [];
   const strengthSessions: StrengthSession[] = [];
@@ -105,6 +105,8 @@ export function generatePlan(startDateISO: string): GeneratedPlan {
         fromPlan: true,
         planMonth: month,
         planWeek,
+        updatedAt: stamp,
+        deletedAt: null,
       });
       list.push(id);
     }
@@ -126,6 +128,8 @@ export function generatePlan(startDateISO: string): GeneratedPlan {
         notes: `Fuerza ${STRENGTH_MINUTES} min (20-25 min).`,
         fromPlan: true,
         planWeek,
+        updatedAt: stamp,
+        deletedAt: null,
       });
     });
   }

@@ -1,7 +1,7 @@
 // Deteccion automatica de hitos a partir del historial de entrenamientos.
 
 import type { Milestone, MilestoneId, Workout } from '../types';
-import { addDays, diffInDays } from './dates';
+import { addDays, diffInDays, nowISO } from './dates';
 
 export const MILESTONE_DEFS: ReadonlyArray<{
   id: MilestoneId;
@@ -41,7 +41,8 @@ export const MILESTONE_DEFS: ReadonlyArray<{
 ];
 
 export function initialMilestones(): Milestone[] {
-  return MILESTONE_DEFS.map((def) => ({ ...def, achievedAt: null }));
+  const stamp = nowISO();
+  return MILESTONE_DEFS.map((def) => ({ ...def, achievedAt: null, updatedAt: stamp, deletedAt: null }));
 }
 
 function isDone(w: Workout): boolean {
@@ -111,11 +112,15 @@ export function reconcileMilestones(current: Milestone[], workouts: Workout[]): 
     const existing = byId.get(def.id);
     const alreadyAt = existing?.achievedAt ?? null;
     const detectedAt = detected[def.id];
+    const achievedAt = alreadyAt ?? detectedAt;
+    const changed = achievedAt !== (existing?.achievedAt ?? null);
     return {
       id: def.id,
       label: def.label,
       condition: def.condition,
-      achievedAt: alreadyAt ?? detectedAt,
+      achievedAt,
+      updatedAt: changed || !existing ? nowISO() : existing.updatedAt,
+      deletedAt: existing?.deletedAt ?? null,
     };
   });
 }
