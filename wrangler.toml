@@ -1,17 +1,28 @@
 # Despliegue en Cloudflare: un unico Worker que sirve la PWA (assets) y la API (/api/*).
 #
-# En el panel de Cloudflare -> tu proyecto -> Settings -> Build:
+# En Cloudflare -> Worker "bikepacking" -> Settings -> Build:
 #   Build command:   npm run build
 #   Deploy command:  npx wrangler deploy
-#   Version de Node: se toma de .node-version (20)
+#   Version de Node:  se toma de .node-version (22)
 #
-# Antes del primer despliegue con API necesitas (ver README, seccion "Cuenta y sync"):
-#   1. Crear la base D1:      npx wrangler d1 create pedalea_a_polonia
-#      y pegar el database_id devuelto abajo.
-#   2. Aplicar migraciones:   npx wrangler d1 migrations apply pedalea_a_polonia --remote
-#   3. Definir los secretos:  npx wrangler secret put GOOGLE_CLIENT_SECRET
-#                             npx wrangler secret put SESSION_SECRET
-#   4. Ajustar APP_URL y GOOGLE_CLIENT_ID abajo (o como variables en el panel).
+# ─────────────────────────────────────────────────────────────────────────────
+#  QUE FALTA PARA QUE FUNCIONE EL LOGIN  (marca cada casilla al hacerlo)
+# ─────────────────────────────────────────────────────────────────────────────
+#  [ ] 1. GOOGLE_CLIENT_ID  -> pegar abajo en [vars] (NO es secreto).
+#         Es el que acaba en ".apps.googleusercontent.com" con numeros delante.
+#  [ ] 2. GOOGLE_CLIENT_SECRET  -> NO va en este archivo. Ponlo con:
+#            npx wrangler secret put GOOGLE_CLIENT_SECRET
+#         (o panel: Settings -> Variables and Secrets -> Add -> Secret)
+#  [ ] 3. SESSION_SECRET  -> NO va en este archivo. Genera y ponlo con:
+#            openssl rand -base64 48
+#            npx wrangler secret put SESSION_SECRET
+#  [ ] 4. En Google Cloud Console, URIs de redireccion autorizados:
+#            https://bikepacking.castrolaura0311.workers.dev/api/auth/callback
+#         y origen JS autorizado:
+#            https://bikepacking.castrolaura0311.workers.dev
+#  [ ] 5. D1 ya creada y migrada:
+#            npx wrangler d1 migrations apply pedalea_a_polonia --remote
+# ─────────────────────────────────────────────────────────────────────────────
 
 name = "bikepacking"
 main = "worker/index.ts"
@@ -25,19 +36,21 @@ not_found_handling = "single-page-application"
 # La API pasa por el Worker antes que el fallback SPA.
 run_worker_first = ["/api/*"]
 
+# Variables NO secretas. Tambien se pueden poner en el panel (Settings -> Variables).
 [vars]
-# URL publica de la app (sin barra final). En produccion, la de tu Worker/dominio.
-APP_URL = "https://bikepacking.castrolaura0311.workers.dev/"
-# Client ID de Google OAuth (no es secreto). Vacio = login deshabilitado.
-GOOGLE_CLIENT_ID = "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.apps.googleusercontent.com"
+# URL publica de la app, SIN barra final.
+APP_URL = "https://bikepacking.castrolaura0311.workers.dev"
+# Client ID de Google OAuth (publico, no es secreto).
+GOOGLE_CLIENT_ID = "848439266426-7ni6uplbrgc7gusfal9ruf0fpeo81trr.apps.googleusercontent.com"
 
-# Base de datos D1. Rellena database_id tras `wrangler d1 create pedalea_a_polonia`.
+# Base de datos D1 (ya creada).
 [[d1_databases]]
 binding = "DB"
 database_name = "pedalea_a_polonia"
 database_id = "23def651-c4f9-41fe-b00e-7f962f234e53"
 migrations_dir = "migrations"
 
-# Secretos (NO se ponen aqui): GOOGLE_CLIENT_SECRET, SESSION_SECRET.
-# Local: archivo .dev.vars (ver .dev.vars.example).
-# Produccion: `npx wrangler secret put <NOMBRE>`.
+# SECRETOS (NO se escriben aqui nunca):
+#   GOOGLE_CLIENT_SECRET  -> npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   SESSION_SECRET        -> npx wrangler secret put SESSION_SECRET
+# En local: archivo .dev.vars (ver .dev.vars.example), ignorado por git.
