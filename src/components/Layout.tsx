@@ -1,4 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { SyncStatusChip } from './SyncStatusChip';
+import { MigrarDatosDialog } from './MigrarDatosDialog';
 
 const NAV_ITEMS: { to: string; label: string; icon: string }[] = [
   { to: '/', label: 'Hoy', icon: '📍' },
@@ -30,18 +32,21 @@ export function Layout(): JSX.Element {
       <header className="sticky top-0 z-30 border-b border-bosque-suave bg-fondo/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2">
           <img src="/favicon.svg" alt="" className="h-8 w-8" aria-hidden="true" />
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-bold leading-tight text-bosque-oscuro">Pedalea a Polonia</p>
-            <p className="text-xs leading-tight text-texto-suave">
+            <p className="truncate text-xs leading-tight text-texto-suave">
               Preparacion tranquila para varios dias sobre la bici
             </p>
           </div>
+          <SyncStatusChip />
         </div>
       </header>
 
       <main id="contenido" className="flex-1 space-y-5 px-4 py-5 pb-32">
         <Outlet />
       </main>
+
+      <MigrarDatosDialog />
 
       {!onRegistro && (
         <NavLink

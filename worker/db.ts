@@ -5,12 +5,16 @@ import type {
   Milestone,
   StrengthSession,
   SyncSnapshot,
+  Tombstone,
   UserSettings,
   Workout,
 } from '../src/types';
 import type { Env } from './env';
 import type { GoogleProfile } from './google';
 import type { ValidPush, ValidRow } from './validate';
+
+/** Los borrados propagados se limitan a esta ventana para acotar el payload. */
+const TOMBSTONE_WINDOW_MS = 60 * 86_400_000;
 
 type RowTable = 'workouts' | 'strength_sessions' | 'milestones';
 
@@ -73,26 +77,58 @@ function parseJsonRow<T>(row: StoredRow): T {
 }
 
 export async function getSnapshot(env: Env, uid: string): Promise<SyncSnapshot> {
-  const [settingsRow, workoutRows, strengthRows, milestoneRows] = await Promise.all([
-    env.DB.prepare(`SELECT data FROM user_settings WHERE user_id = ?1`)
-      .bind(uid)
-      .first<{ data: string }>(),
-    env.DB.prepare(`SELECT id, data, updated_at FROM workouts WHERE user_id = ?1`)
-      .bind(uid)
-      .all<StoredRow>(),
-    env.DB.prepare(`SELECT id, data, updated_at FROM strength_sessions WHERE user_id = ?1`)
-      .bind(uid)
-      .all<StoredRow>(),
-    env.DB.prepare(`SELECT id, data, updated_at FROM milestones WHERE user_id = ?1`)
-      .bind(uid)
-      .all<StoredRow>(),
-  ]);
+  const since = new Date(Date.now() - TOMBSTONE_WINDOW_MS).toISOString();
+  const [settingsRow, workoutRows, strengthRows, milestoneRows, deletedWk, deletedSt] =
+    await Promise.all([
+      env.DB.prepare(`SELECT data FROM user_settings WHERE user_id = ?1 AND deleted_at IS NULL`)
+        .bind(uid)
+        .first<{ data: string }>(),
+      env.DB.prepare(
+        `SELECT id, data, updated_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NULL`,
+      )
+        .bind(uid)
+        .all<StoredRow>(),
+      env.DB.prepare(
+        `SELECT id, data, updated_at FROM strength_sessions WHERE user_id = ?1 AND deleted_at IS NULL`,
+      )
+        .bind(uid)
+        .all<StoredRow>(),
+      env.DB.prepare(
+        `SELECT id, data, updated_at FROM milestones WHERE user_id = ?1 AND deleted_at IS NULL`,
+      )
+        .bind(uid)
+        .all<StoredRow>(),
+      env.DB.prepare(
+        `SELECT id, deleted_at FROM workouts WHERE user_id = ?1 AND deleted_at IS NOT NULL AND deleted_at >= ?2`,
+      )
+        .bind(uid, since)
+        .all<{ id: string; deleted_at: string }>(),
+      env.DB.prepare(
+        `SELECT id, deleted_at FROM strength_sessions WHERE user_id = ?1 AND deleted_at IS NOT NULL AND deleted_at >= ?2`,
+      )
+        .bind(uid, since)
+        .all<{ id: string; deleted_at: string }>(),
+    ]);
+
+  const tombstones: Tombstone[] = [
+    ...(deletedWk.results ?? []).map((r) => ({
+      entity: 'workout' as const,
+      id: r.id,
+      deletedAt: r.deleted_at,
+    })),
+    ...(deletedSt.results ?? []).map((r) => ({
+      entity: 'strengthSession' as const,
+      id: r.id,
+      deletedAt: r.deleted_at,
+    })),
+  ];
 
   return {
     settings: settingsRow ? (JSON.parse(settingsRow.data) as UserSettings) : null,
     workouts: (workoutRows.results ?? []).map((r) => parseJsonRow<Workout>(r)),
     strengthSessions: (strengthRows.results ?? []).map((r) => parseJsonRow<StrengthSession>(r)),
     milestones: (milestoneRows.results ?? []).map((r) => parseJsonRow<Milestone>(r)),
+    tombstones,
   };
 }
 
@@ -152,6 +188,29 @@ export async function applyPush(env: Env, uid: string, push: ValidPush): Promise
   await queueRows('workout', 'workouts', push.workouts);
   await queueRows('strengthSession', 'strength_sessions', push.strengthSessions);
   await queueRows('milestone', 'milestones', push.milestones);
+
+  // Borrados: se guardan como fila minima con deleted_at, ganando solo si son mas
+  // recientes que lo que hay.
+  if (push.tombstones.length > 0) {
+    const wkExisting = await existingUpdatedAt(env, 'workouts', uid);
+    const stExisting = await existingUpdatedAt(env, 'strength_sessions', uid);
+    for (const t of push.tombstones) {
+      const table: RowTable = t.entity === 'workout' ? 'workouts' : 'strength_sessions';
+      const existing = t.entity === 'workout' ? wkExisting : stExisting;
+      if (!incomingWins(t.deletedAt, existing.get(t.id))) {
+        conflicts.push({ entity: t.entity, id: t.id });
+        continue;
+      }
+      const minimal = JSON.stringify({ id: t.id, updatedAt: t.deletedAt, deletedAt: t.deletedAt });
+      statements.push(
+        env.DB.prepare(
+          `INSERT INTO ${table} (user_id, id, data, updated_at, deleted_at, created_at)
+           VALUES (?1, ?2, ?3, ?4, ?4, ?5)
+           ON CONFLICT(user_id, id) DO UPDATE SET data = ?3, updated_at = ?4, deleted_at = ?4`,
+        ).bind(uid, t.id, minimal, t.deletedAt, now),
+      );
+    }
+  }
 
   if (push.settings) {
     const current = await env.DB.prepare(

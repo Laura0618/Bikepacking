@@ -149,6 +149,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const method = request.method.toUpperCase();
 
   if (pathname === '/api/health') return json({ ok: true });
+  if (pathname === '/api/config') return json({ oauthConfigured: isOAuthConfigured(env) });
 
   if (pathname === '/api/auth/login' && method === 'GET') return handleLogin(request, env, url);
   if (pathname === '/api/auth/callback' && method === 'GET') return handleCallback(request, env, url);

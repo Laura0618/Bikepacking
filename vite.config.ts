@@ -39,10 +39,28 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
         navigateFallback: '/index.html',
+        // La API nunca se sirve desde cache ni desde el fallback SPA.
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /\/api\//,
+            handler: 'NetworkOnly',
+          },
+        ],
         cleanupOutdatedCaches: true,
       },
     }),
   ],
+  server: {
+    // En desarrollo, `npm run dev` (Vite :5173) reenvia /api a `npm run dev:api`
+    // (wrangler dev :8787).
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {

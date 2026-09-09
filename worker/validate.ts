@@ -15,11 +15,18 @@ export interface ValidSettings {
   raw: Record<string, unknown>;
 }
 
+export interface ValidTombstone {
+  entity: 'workout' | 'strengthSession';
+  id: string;
+  deletedAt: string;
+}
+
 export interface ValidPush {
   settings: ValidSettings | null;
   workouts: ValidRow[];
   strengthSessions: ValidRow[];
   milestones: ValidRow[];
+  tombstones: ValidTombstone[];
 }
 
 const MAX_ROWS = 5000;
@@ -76,6 +83,20 @@ function parseSettings(value: unknown): ValidSettings | null | undefined {
   return { updatedAt: value.updatedAt, deletedAt: null, raw: value };
 }
 
+function parseTombstones(value: unknown): ValidTombstone[] | null {
+  if (!Array.isArray(value)) return null;
+  if (value.length > MAX_ROWS) return null;
+  const out: ValidTombstone[] = [];
+  for (const item of value) {
+    if (!isObject(item)) return null;
+    if (item.entity !== 'workout' && item.entity !== 'strengthSession') return null;
+    if (typeof item.id !== 'string' || item.id.length === 0 || item.id.length > 200) return null;
+    if (!isIsoDateTime(item.deletedAt)) return null;
+    out.push({ entity: item.entity, id: item.id, deletedAt: item.deletedAt });
+  }
+  return out;
+}
+
 /** Devuelve el push validado o `null` si el cuerpo es invalido. */
 export function parseSyncPush(body: Record<string, unknown>): ValidPush | null {
   const settings = parseSettings(body.settings);
@@ -83,6 +104,7 @@ export function parseSyncPush(body: Record<string, unknown>): ValidPush | null {
   const workouts = parseRows(body.workouts ?? []);
   const strengthSessions = parseRows(body.strengthSessions ?? []);
   const milestones = parseRows(body.milestones ?? []);
-  if (!workouts || !strengthSessions || !milestones) return null;
-  return { settings, workouts, strengthSessions, milestones };
+  const tombstones = parseTombstones(body.tombstones ?? []);
+  if (!workouts || !strengthSessions || !milestones || !tombstones) return null;
+  return { settings, workouts, strengthSessions, milestones, tombstones };
 }

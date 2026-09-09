@@ -163,12 +163,14 @@ export type SyncStatus =
   | 'offline' // sin conexion
   | 'error'; // fallo de sincronizacion
 
-/** Conjunto de datos del usuario tal y como viaja por la API. */
+/** Conjunto de datos del usuario tal y como viaja por la API (solo filas vivas). */
 export interface SyncSnapshot {
   settings: UserSettings | null;
   workouts: Workout[];
   strengthSessions: StrengthSession[];
   milestones: Milestone[];
+  /** Marcadores de borrado para propagar eliminaciones entre dispositivos. */
+  tombstones: Tombstone[];
 }
 
 export interface SyncPullResponse extends SyncSnapshot {
@@ -176,12 +178,13 @@ export interface SyncPullResponse extends SyncSnapshot {
   lastSyncAt: string | null;
 }
 
-/** Cambios que el cliente envia (solo filas modificadas). */
+/** Cambios que el cliente envia (solo filas modificadas + borrados). */
 export interface SyncPushRequest {
   settings: UserSettings | null;
   workouts: Workout[];
   strengthSessions: StrengthSession[];
   milestones: Milestone[];
+  tombstones: Tombstone[];
 }
 
 export interface SyncPushResponse extends SyncPullResponse {

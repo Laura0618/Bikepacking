@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppData } from '../store/AppDataProvider';
 import { Card } from '../components/ui/Card';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -7,12 +8,49 @@ import { WEEKDAY_LABELS } from '../lib/labels';
 import { todayISO } from '../lib/dates';
 import type { Units, WeekdayIndex } from '../types';
 
+const SYNC_STATUS_TEXT: Record<string, string> = {
+  signed_out: 'Sin cuenta',
+  synced: 'Sincronizado',
+  saving: 'Guardando...',
+  pending: 'Pendiente de sincronizar',
+  offline: 'Sin conexion',
+  error: 'Error al sincronizar',
+};
+
 export function AjustesPage(): JSX.Element {
-  const { data, updateSettings, regeneratePlan, resetAll, exportJSON, importJSON } = useAppData();
+  const {
+    data,
+    updateSettings,
+    regeneratePlan,
+    resetAll,
+    exportJSON,
+    importJSON,
+    authStatus,
+    user,
+    oauthConfigured,
+    syncStatus,
+    lastSyncAt,
+    signIn,
+    signOut,
+    syncNow,
+  } = useAppData();
   const { settings } = data;
   const fileRef = useRef<HTMLInputElement>(null);
   const [importText, setImportText] = useState('');
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [params, setParams] = useSearchParams();
+
+  useEffect(() => {
+    const login = params.get('login');
+    if (!login) return;
+    setMessage(
+      login === 'ok'
+        ? { tone: 'ok', text: 'Sesion iniciada. Tus datos se sincronizaran con la cuenta.' }
+        : { tone: 'error', text: 'No se pudo iniciar sesion. Intentalo de nuevo.' },
+    );
+    params.delete('login');
+    setParams(params, { replace: true });
+  }, [params, setParams]);
 
   const toggleDay = (day: WeekdayIndex): void => {
     const has = settings.preferredTrainingDays.includes(day);
@@ -75,6 +113,88 @@ export function AjustesPage(): JSX.Element {
           {message.text}
         </p>
       )}
+
+      <Card title="Cuenta y sincronizacion">
+        {authStatus === 'loading' && (
+          <p className="text-sm text-texto-suave">Comprobando la sesion...</p>
+        )}
+
+        {authStatus === 'signed_out' && (
+          <div className="space-y-3">
+            <p className="text-sm text-texto-suave">
+              Sin cuenta, tus datos viven solo en este navegador. Inicia sesion con Google para
+              guardarlos y verlos en el movil y en el ordenador.
+            </p>
+            {oauthConfigured ? (
+              <button type="button" className="boton-primario" onClick={signIn}>
+                Entrar con Google
+              </button>
+            ) : (
+              <p className="rounded-xl bg-alerta-suave p-3 text-sm text-alerta">
+                El inicio de sesion no esta configurado en este despliegue todavia. La app funciona
+                igual en modo local. Ver el README para activar Google OAuth y D1.
+              </p>
+            )}
+          </div>
+        )}
+
+        {authStatus === 'signed_in' && user && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              {user.picture ? (
+                <img
+                  src={user.picture}
+                  alt=""
+                  className="h-10 w-10 rounded-full"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-bosque-suave text-bosque-oscuro"
+                >
+                  {user.name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-texto">{user.name}</p>
+                <p className="truncate text-sm text-texto-suave">{user.email}</p>
+              </div>
+            </div>
+            <dl className="text-sm text-texto-suave">
+              <div className="flex justify-between gap-2">
+                <dt>Estado</dt>
+                <dd className="font-semibold text-texto">
+                  {SYNC_STATUS_TEXT[syncStatus] ?? syncStatus}
+                </dd>
+              </div>
+              <div className="mt-1 flex justify-between gap-2">
+                <dt>Ultima sincronizacion</dt>
+                <dd className="font-semibold text-texto">
+                  {lastSyncAt ? new Date(lastSyncAt).toLocaleString('es-ES') : 'nunca'}
+                </dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="boton-secundario" onClick={syncNow}>
+                Sincronizar ahora
+              </button>
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={() => {
+                  void signOut();
+                }}
+              >
+                Cerrar sesion
+              </button>
+            </div>
+            <p className="text-xs text-texto-suave">
+              Al cerrar sesion, los datos siguen en este dispositivo pero dejan de sincronizarse.
+            </p>
+          </div>
+        )}
+      </Card>
 
       <Card title="Fechas y preferencias">
         <div className="space-y-3">
