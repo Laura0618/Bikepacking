@@ -1,0 +1,11 @@
+# Copia este archivo a .dev.vars (ignorado por git) y rellena los valores.
+# .dev.vars lo lee `wrangler dev` para el desarrollo local de la API.
+#
+# NO pongas secretos reales en el repositorio.
+
+# Client secret de Google OAuth (Google Cloud Console -> Credenciales).
+GOOGLE_CLIENT_SECRET=""
+
+# Cadena larga y aleatoria para firmar las cookies de sesion.
+# Genera una con:  openssl rand -base64 48
+SESSION_SECRET=""
