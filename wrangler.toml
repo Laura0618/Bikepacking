@@ -27,15 +27,15 @@ run_worker_first = ["/api/*"]
 
 [vars]
 # URL publica de la app (sin barra final). En produccion, la de tu Worker/dominio.
-APP_URL = "http://localhost:5173"
+APP_URL = "https://bikepacking.castrolaura0311.workers.dev/"
 # Client ID de Google OAuth (no es secreto). Vacio = login deshabilitado.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "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.apps.googleusercontent.com"
 
 # Base de datos D1. Rellena database_id tras `wrangler d1 create pedalea_a_polonia`.
 [[d1_databases]]
 binding = "DB"
 database_name = "pedalea_a_polonia"
-database_id = "PENDIENTE_wrangler_d1_create"
+database_id = "23def651-c4f9-41fe-b00e-7f962f234e53"
 migrations_dir = "migrations"
 
 # Secretos (NO se ponen aqui): GOOGLE_CLIENT_SECRET, SESSION_SECRET.
